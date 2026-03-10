@@ -6,7 +6,7 @@ metadata:
   category: "persona"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-chat", "flowleap-patent", "flowleap-academic"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-academic", "flowleap-ocr"]
 ---
 
 # Persona: Researcher
@@ -23,10 +23,6 @@ flowleap academic search "solid state battery electrolyte materials" --limit 20
 
 # Search patents in the same area
 flowleap patent search --query "solid state battery electrolyte" --limit 20
-
-# Compare findings with AI
-flowleap chat --system "You are a research analyst. Compare patent trends with academic research." \
-  "Summarize the overlap between recent academic research and patents in solid-state battery electrolytes."
 ```
 
 ### 2. Technology Landscape
@@ -48,9 +44,6 @@ flowleap ops biblio EP1234567
 flowleap ops abstract EP1234567
 flowleap ops claims EP1234567
 flowleap ops description EP1234567
-
-# Analyze with AI
-flowleap chat "Summarize the key innovation in patent EP1234567 and its implications for the field."
 ```
 
 ### 4. OCR for Legacy Documents

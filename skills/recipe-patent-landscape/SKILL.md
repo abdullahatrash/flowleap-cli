@@ -6,12 +6,12 @@ metadata:
   category: "recipe"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops", "flowleap-chat"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops"]
 ---
 
 # Recipe: Patent Landscape Analysis
 
-Map the patent landscape for a technology area, identifying key players, trends, and white spaces.
+Map the patent landscape for a technology area, identifying key players and trends.
 
 ## Steps
 
@@ -45,13 +45,6 @@ flowleap patent search --query "pa=<company2> AND ti=<technology>" --output json
 flowleap ops search --cql "ti=<technology> AND pd>=2023" --start 1 --end 50
 ```
 
-### Step 5: AI Landscape Summary
-
-```bash
-flowleap chat --system "You are an IP landscape analyst. Provide a structured landscape analysis." \
-  "Analyze the patent landscape for <technology>. Summarize: (1) Top 5 patent holders, (2) Filing trends over time, (3) Key technology sub-areas, (4) Geographic filing patterns, (5) White space opportunities."
-```
-
 ## Output
 
-A structured landscape report with key players, trends, and strategic insights.
+A dataset of patent results segmented by database, applicant, and filing date for landscape analysis.

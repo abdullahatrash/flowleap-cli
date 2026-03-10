@@ -61,8 +61,7 @@ Environment variable overrides (highest priority):
 Config stored in `~/.config/flowleap/config.toml`. Credentials in `~/.config/flowleap/credentials.toml`.
 
 ```bash
-flowleap config set default-model patent-claude-sonnet
-flowleap config set base-url https://api.flowleap.dev
+flowleap config set base-url https://api.flowleap.co
 flowleap config list
 flowleap config reset
 ```

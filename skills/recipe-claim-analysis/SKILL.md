@@ -1,17 +1,17 @@
 ---
 name: recipe-claim-analysis
 version: 1.0.0
-description: "Recipe: Analyze patent claims for scope, dependencies, and infringement risk."
+description: "Recipe: Extract and analyze patent claims with full context."
 metadata:
   category: "recipe"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-ops", "flowleap-chat"]
+    skills: ["flowleap-shared", "flowleap-ops"]
 ---
 
 # Recipe: Claim Analysis
 
-Analyze patent claims to understand scope, dependencies, and potential infringement risks.
+Extract patent claims with full context for detailed analysis.
 
 ## Steps
 
@@ -24,30 +24,22 @@ flowleap ops claims <patent-number> --output json
 ### Step 2: Get Context
 
 ```bash
-flowleap ops abstract <patent-number>
-flowleap ops biblio <patent-number>
+flowleap ops abstract <patent-number> --output json
+flowleap ops biblio <patent-number> --output json
+flowleap ops description <patent-number> --output json
 ```
 
-### Step 3: AI Claim Analysis
+### Step 3: Check Related Patents
 
 ```bash
-flowleap chat --system "You are a patent attorney specializing in claim interpretation. Analyze claims systematically." \
-  "Analyze the claims of patent <number>:
-   1. Identify each independent claim and its scope
-   2. Map dependent claims to their parent claims
-   3. Identify the broadest independent claim
-   4. List the key limitations in each independent claim
-   5. Identify potential design-around opportunities
-   6. Assess claim clarity and potential indefiniteness issues"
-```
-
-### Step 4: Compare with Product/Process (Optional)
-
-```bash
-flowleap chat --system "You are a patent attorney assessing infringement risk." \
-  "Compare the claims of patent <number> against the following product/process description: <description>. For each independent claim, assess whether each limitation is met literally or under doctrine of equivalents."
+flowleap ops family <patent-number> --output json
 ```
 
 ## Output
 
-A structured claim analysis with scope assessment, dependency map, and optional infringement comparison.
+Complete claim data with supporting context:
+- Full claims text (independent and dependent)
+- Abstract for technical field context
+- Bibliographic data for filing details
+- Description for claim interpretation
+- Family members for jurisdiction coverage

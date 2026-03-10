@@ -5,7 +5,7 @@ mod output;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use commands::{academic, auth, chat, config_cmd, models, ocr, ops, patent};
+use commands::{academic, auth, config_cmd, ocr, ops, patent};
 
 /// One CLI for FlowLeap Patent AI — built for humans and AI agents.
 #[derive(Parser)]
@@ -44,8 +44,6 @@ struct Cli {
 enum Commands {
     /// Authenticate with FlowLeap API
     Auth(auth::AuthArgs),
-    /// Chat with AI models (OpenAI-compatible completions)
-    Chat(chat::ChatArgs),
     /// Search and analyze patents
     Patent(patent::PatentArgs),
     /// Direct EPO OPS API commands
@@ -54,8 +52,6 @@ enum Commands {
     Ocr(ocr::OcrArgs),
     /// Search academic literature
     Academic(academic::AcademicArgs),
-    /// List available AI models
-    Models(models::ModelsArgs),
     /// Manage CLI configuration
     Config(config_cmd::ConfigArgs),
     /// Discover available commands and API schema
@@ -97,12 +93,10 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Auth(args) => auth::run(&ctx, args).await,
-        Commands::Chat(args) => chat::run(&ctx, args).await,
         Commands::Patent(args) => patent::run(&ctx, args).await,
         Commands::Ops(args) => ops::run(&ctx, args).await,
         Commands::Ocr(args) => ocr::run(&ctx, args).await,
         Commands::Academic(args) => academic::run(&ctx, args).await,
-        Commands::Models(args) => models::run(&ctx, args).await,
         Commands::Config(args) => config_cmd::run(&ctx, args).await,
         Commands::Schema(args) => run_schema(&ctx, args).await,
     }
@@ -111,7 +105,6 @@ async fn main() -> Result<()> {
 async fn run_schema(_ctx: &client::Context, args: SchemaArgs) -> Result<()> {
     let services = vec![
         ("auth", "Authentication commands (login, logout, status)"),
-        ("chat", "AI chat completions with streaming support"),
         ("patent", "Patent search, query building, claim analysis"),
         (
             "ops",
@@ -119,7 +112,6 @@ async fn run_schema(_ctx: &client::Context, args: SchemaArgs) -> Result<()> {
         ),
         ("ocr", "Document OCR processing via Mistral"),
         ("academic", "Academic literature search"),
-        ("models", "List available AI models"),
         ("config", "CLI configuration management"),
     ];
 

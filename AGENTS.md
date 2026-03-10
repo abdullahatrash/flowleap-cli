@@ -2,7 +2,7 @@
 
 ## Overview
 
-`flowleap` is a Rust CLI for the FlowLeap Patent AI backend API. It provides patent search, AI chat, OCR, academic search, and direct EPO OPS access — designed for both human users and AI agents.
+`flowleap` is a Rust CLI for the FlowLeap Patent AI backend API. It provides patent search, CQL query building, OCR, academic search, and direct EPO OPS access — designed for both human users and AI agents.
 
 ## Build & Test
 
@@ -25,11 +25,9 @@ All four must pass before submitting changes.
 | `src/output.rs` | Output module (re-exports formatter) |
 | `src/output/formatter.rs` | JSON, table, and human-readable output formatting |
 | `src/commands/auth.rs` | OAuth 2.0 + PKCE flow, API key login, status |
-| `src/commands/chat.rs` | SSE streaming chat completions |
 | `src/commands/patent.rs` | Patent search and CQL query builder |
 | `src/commands/academic.rs` | Academic literature search |
 | `src/commands/ocr.rs` | Multipart file upload OCR |
-| `src/commands/models.rs` | List available AI models |
 | `src/commands/ops.rs` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |
 | `src/commands/config_cmd.rs` | CLI configuration management |
 
@@ -58,12 +56,10 @@ Three methods (checked in order):
 |----------|--------|---------------|
 | `/oauth/authorize` | GET | No |
 | `/oauth/token` | POST | No |
-| `/v1/chat/completions` | POST | Yes |
 | `/v1/patent-search` | POST | Yes |
 | `/v1/build-patent-query` | POST | Yes |
 | `/v1/academic-search` | POST | Yes |
 | `/v1/ocr` | POST | Yes |
-| `/api/models` | GET | No |
 | `/api/profile` | GET | Yes |
 | `/api/usage` | GET | Yes |
 

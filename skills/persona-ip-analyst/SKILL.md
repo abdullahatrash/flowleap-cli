@@ -6,7 +6,7 @@ metadata:
   category: "persona"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-chat", "flowleap-patent", "flowleap-ops", "flowleap-academic"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops", "flowleap-academic"]
 ---
 
 # Persona: IP Analyst
@@ -22,10 +22,6 @@ You are an intellectual property analyst using FlowLeap CLI for landscape analys
 flowleap patent search --query "ti=autonomous AND ti=vehicle AND ti=lidar" --limit 30 --output json
 flowleap patent search --query "ti=autonomous AND ti=vehicle AND ti=radar" --limit 30 --output json
 flowleap patent search --query "ti=autonomous AND ti=vehicle AND ti=camera" --limit 30 --output json
-
-# Analyze landscape
-flowleap chat --system "You are an IP analyst. Provide landscape analysis." \
-  "Compare patent activity across lidar, radar, and camera-based autonomous vehicle sensing technologies. Identify key players and trends."
 ```
 
 ### 2. Company Portfolio Analysis
@@ -34,9 +30,6 @@ flowleap chat --system "You are an IP analyst. Provide landscape analysis." \
 # Analyze a company's patent portfolio
 flowleap patent search --query "pa=Waymo" --limit 50 --output json
 flowleap patent search --query "pa=Cruise" --limit 50 --output json
-
-# Compare portfolios
-flowleap chat "Compare the patent portfolios of Waymo and Cruise in autonomous driving. What are each company's strengths?"
 ```
 
 ### 3. White Space Analysis
@@ -45,10 +38,6 @@ flowleap chat "Compare the patent portfolios of Waymo and Cruise in autonomous d
 # Combine patent and academic research
 flowleap patent search --query "quantum computing error correction" --limit 30
 flowleap academic search "quantum computing error correction" --limit 20
-
-# Identify gaps
-flowleap chat --system "You are an IP analyst identifying white space opportunities." \
-  "Based on the patent landscape and academic research in quantum error correction, where are the filing gaps? What areas have academic activity but low patent coverage?"
 ```
 
 ### 4. Trend Monitoring

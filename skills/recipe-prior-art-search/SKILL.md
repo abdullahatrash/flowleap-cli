@@ -6,7 +6,7 @@ metadata:
   category: "recipe"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-patent", "flowleap-academic", "flowleap-chat"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-academic", "flowleap-ops"]
 ---
 
 # Recipe: Prior Art Search
@@ -46,16 +46,9 @@ flowleap ops claims <patent-number>
 flowleap ops family <patent-number>
 ```
 
-### Step 5: AI Analysis
-
-```bash
-flowleap chat --system "You are a patent examiner conducting a prior art analysis." \
-  "Based on the following prior art results, assess the novelty and non-obviousness of: <invention description>. Key prior art found: <list relevant patents and papers>."
-```
-
 ## Output
 
-A summary of relevant prior art with:
-- List of closest prior art patents and papers
-- Assessment of novelty gaps
-- Recommendations for patent claims
+A collection of prior art with:
+- Patent results from EPO and USPTO
+- Academic papers on the same topic
+- Detailed claims and abstracts from the closest prior art

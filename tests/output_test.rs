@@ -27,22 +27,20 @@ fn test_json_pretty_print() {
     assert!(pretty.contains("42"));
 }
 
-/// Test extracting data from API response formats
+/// Test extracting data from API response with "data" wrapper
 #[test]
 fn test_api_response_data_extraction() {
-    // Models response with "data" wrapper
     let response = json!({
         "data": [
-            {"id": "model-1", "provider": "openai", "name": "GPT-4"},
-            {"id": "model-2", "provider": "anthropic", "name": "Claude"}
+            {"id": "item-1", "type": "patent"},
+            {"id": "item-2", "type": "academic"}
         ]
     });
 
     let data = response.get("data").unwrap();
     let arr = data.as_array().unwrap();
     assert_eq!(arr.len(), 2);
-    assert_eq!(arr[0]["id"], "model-1");
-    assert_eq!(arr[1]["provider"], "anthropic");
+    assert_eq!(arr[0]["id"], "item-1");
 }
 
 /// Test extracting results from patent search response
@@ -65,74 +63,6 @@ fn test_patent_search_response_extraction() {
     assert_eq!(arr.len(), 1);
     assert_eq!(arr[0]["publicationNumber"], "EP1234567");
     assert_eq!(arr[0]["title"], "Test Patent");
-}
-
-/// Test chat completion response parsing
-#[test]
-fn test_chat_completion_response() {
-    let response = json!({
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "This is the response."
-            },
-            "finish_reason": "stop"
-        }]
-    });
-
-    let content = response
-        .get("choices")
-        .and_then(|c| c.get(0))
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .and_then(|c| c.as_str());
-
-    assert_eq!(content, Some("This is the response."));
-}
-
-/// Test SSE streaming delta parsing
-#[test]
-fn test_sse_delta_parsing() {
-    let chunk = json!({
-        "choices": [{
-            "delta": {
-                "content": "Hello"
-            }
-        }]
-    });
-
-    let content = chunk
-        .get("choices")
-        .and_then(|c| c.get(0))
-        .and_then(|c| c.get("delta"))
-        .and_then(|d| d.get("content"))
-        .and_then(|c| c.as_str());
-
-    assert_eq!(content, Some("Hello"));
-}
-
-/// Test SSE line parsing
-#[test]
-fn test_sse_line_parsing() {
-    let sse_data = "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\ndata: [DONE]\n\n";
-
-    let mut events = Vec::new();
-    let mut buffer = sse_data.to_string();
-
-    while let Some(pos) = buffer.find("\n\n") {
-        let event = buffer[..pos].to_string();
-        buffer = buffer[pos + 2..].to_string();
-
-        for line in event.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                events.push(data.to_string());
-            }
-        }
-    }
-
-    assert_eq!(events.len(), 2);
-    assert!(events[0].contains("\"content\":\"Hi\""));
-    assert_eq!(events[1], "[DONE]");
 }
 
 /// Test build-query response parsing

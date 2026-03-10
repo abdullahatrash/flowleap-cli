@@ -1,17 +1,17 @@
 ---
 name: recipe-patent-to-report
 version: 1.0.0
-description: "Recipe: Generate a structured report from a patent document."
+description: "Recipe: Extract all data from a patent for structured analysis."
 metadata:
   category: "recipe"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-ops", "flowleap-chat"]
+    skills: ["flowleap-shared", "flowleap-ops", "flowleap-patent"]
 ---
 
 # Recipe: Patent to Report
 
-Extract all data from a patent and generate a structured analysis report.
+Extract all data from a patent document for structured analysis.
 
 ## Steps
 
@@ -26,27 +26,19 @@ flowleap ops family <patent-number> --output json
 flowleap ops legal <patent-number> --output json
 ```
 
-### Step 2: Generate Report
-
-```bash
-flowleap chat --system "You are a patent analyst. Generate a structured report from the following patent data." \
-  "Generate a comprehensive report for patent <number> covering:
-   1. Title and bibliographic summary
-   2. Abstract and technical field
-   3. Independent claim analysis (scope, key limitations)
-   4. Dependent claim mapping
-   5. Patent family coverage (jurisdictions)
-   6. Legal status (active, expired, pending)
-   7. Commercial relevance assessment"
-```
-
-### Step 3: Find Related Patents
+### Step 2: Find Related Patents
 
 ```bash
 # Search for related patents using key terms from the abstract
-flowleap patent search --query "<key terms from abstract>" --limit 10
+flowleap patent search --query "<key terms from abstract>" --limit 10 --output json
 ```
 
 ## Output
 
-A structured patent analysis report suitable for IP due diligence or portfolio review.
+Complete patent data package including:
+- Bibliographic data (title, applicant, dates, classification)
+- Abstract and description text
+- Full claims text
+- Patent family members across jurisdictions
+- Legal status (active, expired, pending)
+- Related patents in the same field

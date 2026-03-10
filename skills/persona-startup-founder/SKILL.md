@@ -6,7 +6,7 @@ metadata:
   category: "persona"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-chat", "flowleap-patent", "flowleap-ops"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops"]
 ---
 
 # Persona: Startup Founder
@@ -24,9 +24,6 @@ flowleap patent build-query "AI-powered smart thermostat that learns occupant be
 # Search for existing patents
 flowleap patent search --query "<generated CQL>" --source epo --limit 20
 flowleap patent search --query "<generated CQL>" --source uspto --limit 20
-
-# Ask AI for assessment
-flowleap chat "I'm building an AI thermostat using reinforcement learning for HVAC optimization. Based on existing patents in this space, is this likely patentable? What would make it novel?"
 ```
 
 ### 2. Freedom-to-Operate
@@ -49,17 +46,15 @@ flowleap ops family US10123456
 # Search competitor patents
 flowleap patent search --query "pa=Nest AND ti=thermostat" --source epo
 flowleap patent search --query "pa=Ecobee AND ti=thermostat" --source epo
-
-# Analyze competitive position
-flowleap chat --system "You are an IP strategist for startups." \
-  "Analyze the patent landscape for smart thermostats. Who are the major patent holders and where are the gaps?"
 ```
 
-### 4. Draft Provisional Claims
+### 4. Deep Dive on Key Patents
 
 ```bash
-flowleap chat --system "You are a patent strategist helping a startup. Draft provisional patent claim language." \
-  "Draft 3 independent claims for an AI thermostat that uses reinforcement learning to optimize HVAC scheduling based on occupant behavior patterns detected through motion and temperature sensors."
+# Analyze blocking patents in detail
+flowleap ops biblio US10123456
+flowleap ops claims US10123456
+flowleap ops abstract US10123456
 ```
 
 ## Tips
@@ -67,4 +62,4 @@ flowleap chat --system "You are a patent strategist helping a startup. Draft pro
 - Start with `patent build-query` to translate your idea into proper search terms
 - Always check both EPO and USPTO
 - Use `ops legal` to check if blocking patents are expired or abandoned
-- Focus on what makes your approach technically different from prior art
+- Use `ops claims` to understand exactly what competitors have protected
