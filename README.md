@@ -6,6 +6,11 @@ A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Se
 
 ## Installation
 
+**npm / pnpm / yarn:**
+```bash
+npm i -g flowleap
+```
+
 **Quick install (macOS / Linux):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh

@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+import { execFileSync } from "child_process";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { existsSync } from "fs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const isWindows = process.platform === "win32";
+const bin = join(__dirname, isWindows ? "flowleap-native.exe" : "flowleap-native");
+
+if (!existsSync(bin)) {
+  console.error("flowleap binary not found. Try reinstalling: npm i -g flowleap");
+  process.exit(1);
+}
+
+try {
+  execFileSync(bin, process.argv.slice(2), { stdio: "inherit" });
+} catch (err) {
+  process.exit(err.status ?? 1);
+}

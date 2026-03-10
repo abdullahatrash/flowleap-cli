@@ -1,0 +1,31 @@
+{
+  "name": "flowleap",
+  "version": "0.1.0",
+  "description": "One CLI for FlowLeap Patent AI — built for humans and AI agents",
+  "bin": {
+    "flowleap": "bin/flowleap"
+  },
+  "scripts": {
+    "postinstall": "node install.mjs"
+  },
+  "keywords": [
+    "patent",
+    "ai",
+    "cli",
+    "flowleap",
+    "epo",
+    "ops",
+    "ocr"
+  ],
+  "author": "FlowLeap",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abdullahatrash/flowleap-cli"
+  },
+  "homepage": "https://flowleap.co",
+  "engines": {
+    "node": ">=16"
+  }
+}
