@@ -8,6 +8,8 @@ use colored::Colorize;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 
+const CLIENT_ID: &str = "flowleap-cli";
+
 #[derive(Parser)]
 pub struct AuthArgs {
     #[command(subcommand)]
@@ -39,8 +41,8 @@ pub async fn run(ctx: &Context, args: AuthArgs) -> Result<()> {
     }
 }
 
-/// Generate a cryptographically random code verifier for PKCE
-fn generate_code_verifier() -> String {
+/// Generate a cryptographically random string for PKCE verifier or CSRF state
+fn generate_random_string() -> String {
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..32).map(|_| rng.gen::<u8>()).collect();
     URL_SAFE_NO_PAD.encode(bytes)
@@ -77,11 +79,12 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
         return Ok(());
     }
 
-    // OAuth 2.0 + PKCE flow
-    println!("Starting OAuth 2.0 login flow...");
+    // OAuth 2.0 + PKCE flow (Clerk-based)
+    println!("Starting OAuth login flow...");
 
-    let code_verifier = generate_code_verifier();
+    let code_verifier = generate_random_string();
     let challenge = code_challenge(&code_verifier);
+    let state = generate_random_string();
 
     // Start local callback server on a random port
     let server = tiny_http::Server::http("127.0.0.1:0")
@@ -91,9 +94,11 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
 
     let base_url = ctx.config.base_url.trim_end_matches('/');
     let auth_url = format!(
-        "{}/oauth/authorize?response_type=code&redirect_uri={}&code_challenge={}&code_challenge_method=S256",
+        "{}/oauth/authorize?client_id={}&redirect_uri={}&state={}&response_type=code&code_challenge={}&code_challenge_method=S256",
         base_url,
+        CLIENT_ID,
         urlencoding(&redirect_uri),
+        state,
         challenge
     );
 
@@ -106,43 +111,55 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
 
     println!("Waiting for authorization callback on port {}...", port);
 
-    // Wait for the callback with the authorization code
-    let auth_code = wait_for_callback(server)?;
+    // Wait for the callback
+    let callback = wait_for_callback(server, &state)?;
 
-    println!("Authorization code received. Exchanging for token...");
+    match callback {
+        CallbackResult::Code(auth_code) => {
+            println!("Authorization code received. Exchanging for token...");
 
-    // Exchange auth code for token
-    let token_url = format!("{}/oauth/token", base_url);
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(&token_url)
-        .json(&serde_json::json!({
-            "grant_type": "authorization_code",
-            "code": auth_code,
-            "redirect_uri": redirect_uri,
-            "code_verifier": code_verifier,
-        }))
-        .send()
-        .await?;
+            // Exchange auth code for token
+            let token_url = format!("{}/oauth/token", base_url);
+            let client = reqwest::Client::new();
+            let resp = client
+                .post(&token_url)
+                .json(&serde_json::json!({
+                    "grant_type": "authorization_code",
+                    "client_id": CLIENT_ID,
+                    "code": auth_code,
+                    "redirect_uri": redirect_uri,
+                    "code_verifier": code_verifier,
+                }))
+                .send()
+                .await?;
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        bail!("Token exchange failed ({}): {}", status, body);
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                bail!("Token exchange failed ({}): {}", status, body);
+            }
+
+            let token_resp: serde_json::Value = resp.json().await?;
+
+            let mut creds = Credentials::load()?;
+
+            if let Some(access_token) = token_resp.get("access_token").and_then(|v| v.as_str()) {
+                creds.token = Some(access_token.to_string());
+            }
+            if let Some(refresh) = token_resp.get("refresh_token").and_then(|v| v.as_str()) {
+                creds.refresh_token = Some(refresh.to_string());
+            }
+
+            creds.save()?;
+        }
+        CallbackResult::Token(token_value) => {
+            // Implicit flow — token returned directly (Clerk session token)
+            let mut creds = Credentials::load()?;
+            creds.token = Some(token_value);
+            creds.save()?;
+        }
     }
 
-    let token_resp: serde_json::Value = resp.json().await?;
-
-    let mut creds = Credentials::load()?;
-
-    if let Some(access_token) = token_resp.get("access_token").and_then(|v| v.as_str()) {
-        creds.token = Some(access_token.to_string());
-    }
-    if let Some(refresh) = token_resp.get("refresh_token").and_then(|v| v.as_str()) {
-        creds.refresh_token = Some(refresh.to_string());
-    }
-
-    creds.save()?;
     println!("{} Successfully authenticated!", "✓".green());
     println!(
         "Credentials saved to {:?}",
@@ -152,50 +169,64 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
     Ok(())
 }
 
-/// Wait for the OAuth callback and extract the authorization code
-fn wait_for_callback(server: tiny_http::Server) -> Result<String> {
-    // Wait up to 120 seconds for a callback
+enum CallbackResult {
+    Code(String),
+    Token(String),
+}
+
+/// Parse query string parameters from a URL path
+fn parse_query_params(url: &str) -> Vec<(String, String)> {
+    let query = url
+        .split('?')
+        .nth(1)
+        .or_else(|| url.split('#').nth(1))
+        .unwrap_or("");
+
+    query
+        .split('&')
+        .filter_map(|param| {
+            let (key, value) = param.split_once('=')?;
+            Some((key.to_string(), value.to_string()))
+        })
+        .collect()
+}
+
+/// Wait for the OAuth callback and extract the authorization code or token
+fn wait_for_callback(server: tiny_http::Server, expected_state: &str) -> Result<CallbackResult> {
     let request = server
         .recv_timeout(std::time::Duration::from_secs(120))
         .map_err(|e| anyhow::anyhow!("Callback server error: {}", e))?
         .ok_or_else(|| anyhow::anyhow!("Timed out waiting for authorization callback"))?;
 
     let url = request.url().to_string();
+    let params = parse_query_params(&url);
 
-    // Extract code from query string
-    let code = url
-        .split('?')
-        .nth(1)
-        .and_then(|qs| {
-            qs.split('&').find_map(|param| {
-                let (key, value) = param.split_once('=')?;
-                if key == "code" {
-                    Some(value.to_string())
-                } else {
-                    None
-                }
-            })
-        })
-        .ok_or_else(|| anyhow::anyhow!("No authorization code in callback URL"))?;
+    // Check for error
+    if let Some((_, error)) = params.iter().find(|(k, _)| k == "error") {
+        let desc = params
+            .iter()
+            .find(|(k, _)| k == "error_description")
+            .map(|(_, v)| v.as_str())
+            .unwrap_or("Unknown error");
 
-    // Check for error parameter
-    if let Some(error) = url.split('?').nth(1).and_then(|qs| {
-        qs.split('&').find_map(|param| {
-            let (key, value) = param.split_once('=')?;
-            if key == "error" {
-                Some(value.to_string())
-            } else {
-                None
-            }
-        })
-    }) {
-        // Send error response to browser
         let response = tiny_http::Response::from_string(
             "<html><body><h1>Authentication Failed</h1><p>You can close this window.</p></body></html>",
         )
         .with_header("Content-Type: text/html".parse::<tiny_http::Header>().unwrap());
         let _ = request.respond(response);
-        bail!("OAuth error: {}", error);
+        bail!("OAuth error: {} — {}", error, desc);
+    }
+
+    // Validate state parameter (CSRF protection)
+    if let Some((_, state)) = params.iter().find(|(k, _)| k == "state") {
+        if state != expected_state {
+            let response = tiny_http::Response::from_string(
+                "<html><body><h1>Authentication Failed</h1><p>Invalid state parameter.</p></body></html>",
+            )
+            .with_header("Content-Type: text/html".parse::<tiny_http::Header>().unwrap());
+            let _ = request.respond(response);
+            bail!("OAuth state mismatch — possible CSRF attack");
+        }
     }
 
     // Send success response to browser
@@ -205,10 +236,19 @@ fn wait_for_callback(server: tiny_http::Server) -> Result<String> {
     .with_header("Content-Type: text/html".parse::<tiny_http::Header>().unwrap());
     let _ = request.respond(response);
 
-    Ok(code)
+    // Check for token (implicit flow) or code (authorization code flow)
+    if let Some((_, token)) = params.iter().find(|(k, _)| k == "access_token") {
+        return Ok(CallbackResult::Token(token.clone()));
+    }
+
+    if let Some((_, code)) = params.iter().find(|(k, _)| k == "code") {
+        return Ok(CallbackResult::Code(code.clone()));
+    }
+
+    bail!("No authorization code or token in callback URL")
 }
 
-/// Simple URL encoding for the redirect URI
+/// Simple URL encoding for query parameter values
 fn urlencoding(s: &str) -> String {
     s.replace(':', "%3A").replace('/', "%2F")
 }
