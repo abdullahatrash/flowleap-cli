@@ -8,6 +8,8 @@ use std::path::PathBuf;
 pub struct Config {
     #[serde(default = "default_base_url")]
     pub base_url: String,
+    #[serde(default = "default_website_url")]
+    pub website_url: String,
     pub default_model: Option<String>,
     pub output_format: Option<String>,
 }
@@ -16,6 +18,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             base_url: default_base_url(),
+            website_url: default_website_url(),
             default_model: None,
             output_format: None,
         }
@@ -32,6 +35,10 @@ pub struct Credentials {
 
 fn default_base_url() -> String {
     "https://api.flowleap.co".to_string()
+}
+
+fn default_website_url() -> String {
+    "https://flowleap.co".to_string()
 }
 
 impl Config {

@@ -93,9 +93,10 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
     let redirect_uri = format!("http://127.0.0.1:{}/callback", port);
 
     let base_url = ctx.config.base_url.trim_end_matches('/');
+    let website_url = ctx.config.website_url.trim_end_matches('/');
     let auth_url = format!(
         "{}/oauth/authorize?client_id={}&redirect_uri={}&state={}&response_type=code&code_challenge={}&code_challenge_method=S256",
-        base_url,
+        website_url,
         CLIENT_ID,
         urlencoding(&redirect_uri),
         state,
