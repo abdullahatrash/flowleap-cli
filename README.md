@@ -6,8 +6,14 @@ A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Se
 
 ## Installation
 
+**Quick install (macOS / Linux):**
 ```bash
-cargo install --path .
+curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
+```
+
+**From source (requires Rust):**
+```bash
+cargo install --git https://github.com/abdullahatrash/flowleap-cli.git
 ```
 
 ## Quick Start
@@ -40,7 +46,7 @@ flowleap academic search "machine learning patent classification"
 
 FlowLeap CLI supports three authentication methods:
 
-1. **OAuth 2.0 + PKCE** (recommended): `flowleap auth login` opens your browser
+1. **OAuth 2.0 Device Flow** (recommended): `flowleap auth login` opens your browser
 2. **API key**: `flowleap auth login --api-key sk-...`
 3. **Environment variables**: `FLOWLEAP_API_KEY` or `FLOWLEAP_TOKEN`
 
