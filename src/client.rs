@@ -2,10 +2,11 @@ use anyhow::{bail, Result};
 use reqwest::{Client, RequestBuilder, Response};
 use serde_json::Value;
 
-use crate::config::Config;
+use crate::config::{Config, Credentials};
 
 pub struct Context {
     pub config: Config,
+    pub credentials: Credentials,
     pub output_format: String,
     pub dry_run: bool,
     pub verbose: bool,
@@ -16,12 +17,12 @@ impl Context {
         Client::new()
     }
 
-    fn url(&self, path: &str) -> String {
+    pub fn url(&self, path: &str) -> String {
         format!("{}{}", self.config.base_url.trim_end_matches('/'), path)
     }
 
     fn apply_auth(&self, req: RequestBuilder) -> RequestBuilder {
-        if let Some(auth) = self.config.auth_header() {
+        if let Some(auth) = self.credentials.auth_header() {
             req.header("Authorization", auth)
         } else {
             req
@@ -95,7 +96,7 @@ impl Context {
 
     /// Require authentication, returning an error if not configured
     pub fn require_auth(&self) -> Result<()> {
-        if self.config.auth_header().is_none() {
+        if self.credentials.auth_header().is_none() {
             bail!(
                 "Not authenticated. Run 'flowleap auth login' or set FLOWLEAP_API_KEY / FLOWLEAP_TOKEN."
             );

@@ -3,13 +3,31 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// Application configuration stored in ~/.config/flowleap/config.toml
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default = "default_base_url")]
     pub base_url: String,
+    pub default_model: Option<String>,
+    pub output_format: Option<String>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            base_url: default_base_url(),
+            default_model: None,
+            output_format: None,
+        }
+    }
+}
+
+/// Credentials stored separately in ~/.config/flowleap/credentials.toml
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Credentials {
     pub api_key: Option<String>,
     pub token: Option<String>,
-    pub default_model: Option<String>,
+    pub refresh_token: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -26,38 +44,62 @@ impl Config {
     }
 
     pub fn config_path() -> Result<PathBuf> {
-        Ok(Self::config_dir()?.join("config.json"))
+        Ok(Self::config_dir()?.join("config.toml"))
     }
 
     pub fn load() -> Result<Self> {
         let path = Self::config_path()?;
         if path.exists() {
             let contents = fs::read_to_string(&path)?;
-            let config: Config = serde_json::from_str(&contents)?;
+            let config: Config = toml::from_str(&contents)?;
             Ok(config)
         } else {
-            Ok(Config {
-                base_url: default_base_url(),
-                ..Default::default()
-            })
+            Ok(Config::default())
         }
     }
 
     pub fn save(&self) -> Result<()> {
         let path = Self::config_path()?;
-        let contents = serde_json::to_string_pretty(self)?;
+        let contents = toml::to_string_pretty(self)?;
+        fs::write(path, contents)?;
+        Ok(())
+    }
+}
+
+impl Credentials {
+    pub fn credentials_path() -> Result<PathBuf> {
+        Ok(Config::config_dir()?.join("credentials.toml"))
+    }
+
+    pub fn load() -> Result<Self> {
+        let path = Self::credentials_path()?;
+        if path.exists() {
+            let contents = fs::read_to_string(&path)?;
+            let creds: Credentials = toml::from_str(&contents)?;
+            Ok(creds)
+        } else {
+            Ok(Credentials::default())
+        }
+    }
+
+    pub fn save(&self) -> Result<()> {
+        let path = Self::credentials_path()?;
+        let contents = toml::to_string_pretty(self)?;
         fs::write(path, contents)?;
         Ok(())
     }
 
     /// Get the authorization header value, preferring token > api_key
     pub fn auth_header(&self) -> Option<String> {
-        if let Some(ref token) = self.token {
-            Some(format!("Bearer {}", token))
-        } else if let Some(ref key) = self.api_key {
-            Some(format!("Bearer {}", key))
-        } else {
-            None
-        }
+        self.token
+            .as_ref()
+            .or(self.api_key.as_ref())
+            .map(|v| format!("Bearer {}", v))
+    }
+
+    pub fn clear(&mut self) {
+        self.api_key = None;
+        self.token = None;
+        self.refresh_token = None;
     }
 }

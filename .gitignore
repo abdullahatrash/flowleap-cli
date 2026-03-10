@@ -1,1 +1,22 @@
 /target/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Config files with credentials (never commit these)
+config.toml
+credentials.toml
