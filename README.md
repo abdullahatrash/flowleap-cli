@@ -1,0 +1,134 @@
+# FlowLeap CLI
+
+A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.dev) backend API. Search patents, chat with AI models, run OCR, and more — all from your terminal.
+
+## Installation
+
+```bash
+cargo install --path .
+```
+
+## Quick Start
+
+```bash
+# Authenticate (opens browser for OAuth)
+flowleap auth login
+
+# Or use an API key directly
+flowleap auth login --api-key sk-...
+
+# Chat with an AI model
+flowleap chat "What is claim 1 of EP1234567?"
+
+# Pipe input
+echo "Summarize this patent" | flowleap chat
+
+# Search patents
+flowleap patent search --query "solar panel efficiency"
+
+# Build a CQL query from natural language
+flowleap patent build-query "patents about lithium battery recycling filed by Tesla"
+
+# List available models
+flowleap models
+
+# OCR a document
+flowleap ocr extract document.pdf
+
+# Search academic literature
+flowleap academic search "machine learning patent classification"
+```
+
+## Authentication
+
+FlowLeap CLI supports three authentication methods:
+
+1. **OAuth 2.0 + PKCE** (recommended): `flowleap auth login` opens your browser
+2. **API key**: `flowleap auth login --api-key sk-...`
+3. **Environment variables**: `FLOWLEAP_API_KEY` or `FLOWLEAP_TOKEN`
+
+Credentials are stored in `~/.config/flowleap/credentials.toml`.
+
+```bash
+# Check auth status
+flowleap auth status
+
+# Clear credentials
+flowleap auth logout
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `auth login/logout/status` | Manage authentication |
+| `chat` | Chat with AI models (SSE streaming) |
+| `patent search` | Search patents (EPO/USPTO) |
+| `patent build-query` | Natural language → CQL query |
+| `models` | List available AI models |
+| `ocr extract` | Extract text from PDF/images |
+| `academic search` | Search academic literature |
+| `ops` | Direct EPO OPS API access |
+| `config` | Manage CLI configuration |
+| `schema` | Discover available services |
+
+## Configuration
+
+Configuration is stored in `~/.config/flowleap/config.toml`.
+
+```bash
+# Set default model
+flowleap config set default-model patent-claude-sonnet
+
+# Set base URL
+flowleap config set base-url https://api.flowleap.dev
+
+# List all config
+flowleap config list
+
+# Reset to defaults
+flowleap config reset
+```
+
+### Config Precedence
+
+CLI flags > environment variables > config file
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `FLOWLEAP_API_KEY` | API key for authentication |
+| `FLOWLEAP_TOKEN` | Bearer token for authentication |
+| `FLOWLEAP_BASE_URL` | API base URL |
+
+## Global Flags
+
+```
+--output <format>   Output format: json, table, human (default: human)
+--base-url <url>    Override API base URL
+--api-key <key>     Override stored API key
+--token <token>     Override stored token
+--dry-run           Show request details without executing
+--verbose, -v       Show verbose request/response details
+```
+
+## Development
+
+```bash
+# Build
+cargo build
+
+# Run tests
+cargo test
+
+# Lint
+cargo clippy
+
+# Format
+cargo fmt
+```
+
+## License
+
+MIT
