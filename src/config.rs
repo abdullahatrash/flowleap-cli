@@ -38,7 +38,7 @@ fn default_base_url() -> String {
 }
 
 fn default_website_url() -> String {
-    "https://flowleap.co".to_string()
+    "https://www.flowleap.co".to_string()
 }
 
 impl Config {

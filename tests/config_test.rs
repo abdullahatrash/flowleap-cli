@@ -53,12 +53,12 @@ base_url = "https://api.flowleap.co"
     }
 
     fn default_website_url() -> String {
-        "https://flowleap.co".to_string()
+        "https://www.flowleap.co".to_string()
     }
 
     let config: Config = toml::from_str(toml_content).unwrap();
     assert_eq!(config.base_url, "https://api.flowleap.co");
-    assert_eq!(config.website_url, "https://flowleap.co");
+    assert_eq!(config.website_url, "https://www.flowleap.co");
     assert!(config.default_model.is_none());
     assert!(config.output_format.is_none());
 }
