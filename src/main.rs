@@ -16,10 +16,6 @@ struct Cli {
     #[arg(long, env = "FLOWLEAP_BASE_URL")]
     base_url: Option<String>,
 
-    /// Website URL (used for OAuth authorize)
-    #[arg(long, env = "FLOWLEAP_WEBSITE_URL")]
-    website_url: Option<String>,
-
     /// API key (overrides stored credentials)
     #[arg(long, env = "FLOWLEAP_API_KEY")]
     api_key: Option<String>,
@@ -79,9 +75,6 @@ async fn main() -> Result<()> {
     // CLI flags > env vars > config file
     if let Some(ref url) = cli.base_url {
         cfg.base_url = url.clone();
-    }
-    if let Some(ref url) = cli.website_url {
-        cfg.website_url = url.clone();
     }
     if let Some(ref key) = cli.api_key {
         creds.api_key = Some(key.clone());

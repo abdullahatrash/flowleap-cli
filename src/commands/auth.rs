@@ -1,14 +1,21 @@
 use crate::client::Context;
 use crate::config::Credentials;
 use anyhow::{bail, Result};
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use rand::Rng;
-use sha2::{Digest, Sha256};
+use indicatif::{ProgressBar, ProgressStyle};
+use serde::Deserialize;
+use std::time::Duration;
 
-const CLIENT_ID: &str = "flowleap-cli";
+#[derive(Debug, Deserialize)]
+struct DeviceAuthResponse {
+    device_code: String,
+    user_code: String,
+    verification_uri: String,
+    verification_uri_complete: String,
+    expires_in: u64,
+    interval: u64,
+}
 
 #[derive(Parser)]
 pub struct AuthArgs {
@@ -41,21 +48,6 @@ pub async fn run(ctx: &Context, args: AuthArgs) -> Result<()> {
     }
 }
 
-/// Generate a cryptographically random string for PKCE verifier or CSRF state
-fn generate_random_string() -> String {
-    let mut rng = rand::thread_rng();
-    let bytes: Vec<u8> = (0..32).map(|_| rng.gen::<u8>()).collect();
-    URL_SAFE_NO_PAD.encode(bytes)
-}
-
-/// Derive the code challenge from the verifier using S256
-fn code_challenge(verifier: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(verifier.as_bytes());
-    let hash = hasher.finalize();
-    URL_SAFE_NO_PAD.encode(hash)
-}
-
 async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) -> Result<()> {
     // If credentials passed directly, store them
     if api_key.is_some() || token.is_some() {
@@ -79,160 +71,108 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
         return Ok(());
     }
 
-    // OAuth 2.0 + PKCE flow (Clerk-based)
-    println!("Starting OAuth login flow...");
-
-    let code_verifier = generate_random_string();
-    let challenge = code_challenge(&code_verifier);
-    let state = generate_random_string();
-
-    // Start local callback server on a random port
-    let server = tiny_http::Server::http("127.0.0.1:0")
-        .map_err(|e| anyhow::anyhow!("Failed to start callback server: {}", e))?;
-    let port = server.server_addr().to_ip().unwrap().port();
-    let redirect_uri = format!("http://127.0.0.1:{}/callback", port);
+    // OAuth 2.0 Device Authorization flow
+    println!("Starting device authorization flow...");
 
     let base_url = ctx.config.base_url.trim_end_matches('/');
-    let website_url = ctx.config.website_url.trim_end_matches('/');
-    let auth_url = format!(
-        "{}/oauth/authorize?client_id={}&redirect_uri={}&state={}&response_type=code&code_challenge={}&code_challenge_method=S256",
-        website_url,
-        CLIENT_ID,
-        urlencoding(&redirect_uri),
-        state,
-        challenge
-    );
 
-    println!("Opening browser for authentication...");
-    println!("If the browser doesn't open, visit:\n  {}\n", auth_url);
-
-    if open::that(&auth_url).is_err() {
-        eprintln!("Could not open browser automatically. Please visit the URL above.");
-    }
-
-    println!("Waiting for authorization callback on port {}...", port);
-
-    // Wait for the callback
-    let auth_code = wait_for_callback(server, &state)?;
-
-    println!("Authorization code received. Exchanging for token...");
-
-    // Exchange auth code for token
-    let token_url = format!("{}/oauth/token", base_url);
     let client = reqwest::Client::new();
     let resp = client
-        .post(&token_url)
-        .json(&serde_json::json!({
-            "grant_type": "authorization_code",
-            "client_id": CLIENT_ID,
-            "code": auth_code,
-            "redirect_uri": redirect_uri,
-            "code_verifier": code_verifier,
-        }))
+        .post(format!("{}/oauth/device", base_url))
+        .json(&serde_json::json!({"client_id": "flowleap-cli"}))
         .send()
         .await?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        bail!("Token exchange failed ({}): {}", status, body);
+        bail!("Device authorization request failed ({}): {}", status, body);
     }
 
-    let token_resp: serde_json::Value = resp.json().await?;
+    let response: DeviceAuthResponse = resp.json().await?;
 
-    let mut creds = Credentials::load()?;
-
-    if let Some(access_token) = token_resp.get("access_token").and_then(|v| v.as_str()) {
-        creds.token = Some(access_token.to_string());
-    }
-    if let Some(refresh) = token_resp.get("refresh_token").and_then(|v| v.as_str()) {
-        creds.refresh_token = Some(refresh.to_string());
-    }
-
-    creds.save()?;
-
-    println!("{} Successfully authenticated!", "✓".green());
     println!(
-        "Credentials saved to {:?}",
-        Credentials::credentials_path()?
+        "\n  {} {}\n  {} {}\n",
+        "▸ Visit:".bold(),
+        response.verification_uri.cyan(),
+        "▸ Enter code:".bold(),
+        response.user_code.bold().yellow(),
     );
 
-    Ok(())
-}
+    let _ = open::that(&response.verification_uri_complete);
 
-/// Parse query string parameters from a URL path
-fn parse_query_params(url: &str) -> Vec<(String, String)> {
-    let query = url
-        .split('?')
-        .nth(1)
-        .or_else(|| url.split('#').nth(1))
-        .unwrap_or("");
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.cyan} {msg}")
+            .unwrap(),
+    );
+    spinner.set_message("Waiting for authorization...");
+    spinner.enable_steady_tick(Duration::from_millis(100));
 
-    query
-        .split('&')
-        .filter_map(|param| {
-            let (key, value) = param.split_once('=')?;
-            Some((key.to_string(), value.to_string()))
-        })
-        .collect()
-}
+    let mut interval = response.interval;
+    let deadline = std::time::Instant::now() + Duration::from_secs(response.expires_in);
 
-/// Wait for the OAuth callback and extract the authorization code
-fn wait_for_callback(server: tiny_http::Server, expected_state: &str) -> Result<String> {
-    let request = server
-        .recv_timeout(std::time::Duration::from_secs(120))
-        .map_err(|e| anyhow::anyhow!("Callback server error: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Timed out waiting for authorization callback"))?;
+    loop {
+        tokio::time::sleep(Duration::from_secs(interval)).await;
 
-    let url = request.url().to_string();
-    let params = parse_query_params(&url);
+        if std::time::Instant::now() > deadline {
+            spinner.finish_and_clear();
+            bail!("Device authorization expired. Please try again.");
+        }
 
-    // Check for error
-    if let Some((_, error)) = params.iter().find(|(k, _)| k == "error") {
-        let desc = params
-            .iter()
-            .find(|(k, _)| k == "error_description")
-            .map(|(_, v)| v.as_str())
-            .unwrap_or("Unknown error");
+        let poll_resp = client
+            .post(format!("{}/oauth/device/token", base_url))
+            .json(&serde_json::json!({
+                "device_code": response.device_code,
+                "client_id": "flowleap-cli",
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+            }))
+            .send()
+            .await?;
 
-        let response = tiny_http::Response::from_string(
-            "<html><body><h1>Authentication Failed</h1><p>You can close this window.</p></body></html>",
-        )
-        .with_header("Content-Type: text/html".parse::<tiny_http::Header>().unwrap());
-        let _ = request.respond(response);
-        bail!("OAuth error: {} — {}", error, desc);
-    }
+        let body: serde_json::Value = poll_resp.json().await?;
 
-    // Validate state parameter (CSRF protection)
-    if let Some((_, state)) = params.iter().find(|(k, _)| k == "state") {
-        if state != expected_state {
-            let response = tiny_http::Response::from_string(
-                "<html><body><h1>Authentication Failed</h1><p>Invalid state parameter.</p></body></html>",
-            )
-            .with_header("Content-Type: text/html".parse::<tiny_http::Header>().unwrap());
-            let _ = request.respond(response);
-            bail!("OAuth state mismatch — possible CSRF attack");
+        if let Some(access_token) = body.get("access_token").and_then(|v| v.as_str()) {
+            spinner.finish_and_clear();
+            // Store token
+            let mut creds = Credentials::load()?;
+            creds.token = Some(access_token.to_string());
+            creds.save()?;
+            println!("{} Successfully authenticated!", "✓".green());
+            println!(
+                "Credentials saved to {:?}",
+                Credentials::credentials_path()?
+            );
+            return Ok(());
+        }
+
+        if let Some(error) = body.get("error").and_then(|v| v.as_str()) {
+            match error {
+                "authorization_pending" => continue,
+                "slow_down" => {
+                    interval += 5;
+                    continue;
+                }
+                "expired_token" => {
+                    spinner.finish_and_clear();
+                    bail!("Device authorization expired. Please try again.");
+                }
+                "access_denied" => {
+                    spinner.finish_and_clear();
+                    bail!("Authorization was denied.");
+                }
+                other => {
+                    spinner.finish_and_clear();
+                    let desc = body
+                        .get("error_description")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown error");
+                    bail!("Authorization failed: {} — {}", other, desc);
+                }
+            }
         }
     }
-
-    // Send success response to browser
-    let response = tiny_http::Response::from_string(
-        "<html><body><h1>Authentication Successful!</h1><p>You can close this window and return to the terminal.</p></body></html>",
-    )
-    .with_header("Content-Type: text/html".parse::<tiny_http::Header>().unwrap());
-    let _ = request.respond(response);
-
-    // Extract the authorization code
-    if let Some((_, code)) = params.iter().find(|(k, _)| k == "code") {
-        return Ok(code.clone());
-    }
-
-    bail!("No authorization code in callback URL")
-}
-
-/// Simple URL encoding for query parameter values
-fn urlencoding(s: &str) -> String {
-    s.replace(':', "%3A").replace('/', "%2F")
 }
 
 async fn logout() -> Result<()> {
@@ -245,7 +185,6 @@ async fn logout() -> Result<()> {
 
 async fn status(ctx: &Context) -> Result<()> {
     println!("Base URL:  {}", ctx.config.base_url);
-    println!("Website:   {}", ctx.config.website_url);
 
     if ctx.credentials.token.is_some() {
         println!("Auth:      {} (token)", "Authenticated".green());
