@@ -3,7 +3,10 @@ use serde_json::Value;
 
 /// Print raw JSON (for --output json)
 pub fn print_json(value: &Value) {
-    println!("{}", serde_json::to_string_pretty(value).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).unwrap_or_default()
+    );
 }
 
 /// Print a JSON array as a table (for --output table)

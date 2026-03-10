@@ -13,14 +13,14 @@ use commands::{academic, auth, chat, config_cmd, models, ocr, ops, patent};
 #[command(propagate_version = true)]
 struct Cli {
     /// API base URL
-    #[arg(long, env = "FLOWLEAP_BASE_URL", default_value = "https://api.flowleap.co")]
-    base_url: String,
+    #[arg(long, env = "FLOWLEAP_BASE_URL")]
+    base_url: Option<String>,
 
-    /// API key (overrides stored config)
+    /// API key (overrides stored credentials)
     #[arg(long, env = "FLOWLEAP_API_KEY")]
     api_key: Option<String>,
 
-    /// Bearer token (overrides stored config)
+    /// Bearer token (overrides stored credentials)
     #[arg(long, env = "FLOWLEAP_TOKEN")]
     token: Option<String>,
 
@@ -72,20 +72,24 @@ struct SchemaArgs {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Build context shared across commands
+    // Load config and credentials
     let mut cfg = config::Config::load()?;
+    let mut creds = config::Credentials::load()?;
 
-    // CLI flags override stored config
+    // CLI flags > env vars > config file
+    if let Some(ref url) = cli.base_url {
+        cfg.base_url = url.clone();
+    }
     if let Some(ref key) = cli.api_key {
-        cfg.api_key = Some(key.clone());
+        creds.api_key = Some(key.clone());
     }
     if let Some(ref tok) = cli.token {
-        cfg.token = Some(tok.clone());
+        creds.token = Some(tok.clone());
     }
-    cfg.base_url = cli.base_url.clone();
 
     let ctx = client::Context {
         config: cfg,
+        credentials: creds,
         output_format: cli.output.clone(),
         dry_run: cli.dry_run,
         verbose: cli.verbose,
@@ -109,7 +113,10 @@ async fn run_schema(_ctx: &client::Context, args: SchemaArgs) -> Result<()> {
         ("auth", "Authentication commands (login, logout, status)"),
         ("chat", "AI chat completions with streaming support"),
         ("patent", "Patent search, query building, claim analysis"),
-        ("ops", "Direct EPO OPS API (biblio, claims, family, legal, ...)"),
+        (
+            "ops",
+            "Direct EPO OPS API (biblio, claims, family, legal, ...)",
+        ),
         ("ocr", "Document OCR processing via Mistral"),
         ("academic", "Academic literature search"),
         ("models", "List available AI models"),
@@ -125,7 +132,10 @@ async fn run_schema(_ctx: &client::Context, args: SchemaArgs) -> Result<()> {
             println!("\nUse 'flowleap schema <service>' for details.");
         }
         Some(path) => {
-            println!("Schema for '{}' — run 'flowleap {} --help' for full details.", path, path);
+            println!(
+                "Schema for '{}' — run 'flowleap {} --help' for full details.",
+                path, path
+            );
         }
     }
     Ok(())

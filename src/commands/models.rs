@@ -13,8 +13,8 @@ pub struct ModelsArgs {
 
 pub async fn run(ctx: &Context, args: ModelsArgs) -> Result<()> {
     let path = match args.provider {
-        Some(ref p) => format!("/v1/models?provider={}", p),
-        None => "/v1/models".to_string(),
+        Some(ref p) => format!("/api/models?provider={}", p),
+        None => "/api/models".to_string(),
     };
 
     let req = ctx.get(&path);

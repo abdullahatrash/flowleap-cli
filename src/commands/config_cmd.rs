@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 
 use crate::client::Context;
-use crate::config::Config;
+use crate::config::{Config, Credentials};
 
 #[derive(Parser)]
 pub struct ConfigArgs {
@@ -15,7 +15,7 @@ pub struct ConfigArgs {
 enum ConfigCommand {
     /// Set a config value
     Set {
-        /// Config key (base-url, default-model)
+        /// Config key (base-url, default-model, output-format)
         key: String,
         /// Config value
         value: String,
@@ -46,7 +46,11 @@ async fn set(key: &str, value: &str) -> Result<()> {
     match key {
         "base-url" => config.base_url = value.to_string(),
         "default-model" => config.default_model = Some(value.to_string()),
-        _ => anyhow::bail!("Unknown config key: '{}'. Valid keys: base-url, default-model", key),
+        "output-format" => config.output_format = Some(value.to_string()),
+        _ => anyhow::bail!(
+            "Unknown config key: '{}'. Valid keys: base-url, default-model, output-format",
+            key
+        ),
     }
 
     config.save()?;
@@ -60,7 +64,11 @@ async fn get(key: &str) -> Result<()> {
     let value = match key {
         "base-url" => Some(config.base_url),
         "default-model" => config.default_model,
-        _ => anyhow::bail!("Unknown config key: '{}'. Valid keys: base-url, default-model", key),
+        "output-format" => config.output_format,
+        _ => anyhow::bail!(
+            "Unknown config key: '{}'. Valid keys: base-url, default-model, output-format",
+            key
+        ),
     };
 
     match value {
@@ -72,14 +80,20 @@ async fn get(key: &str) -> Result<()> {
 
 async fn list() -> Result<()> {
     let config = Config::load()?;
+    let creds = Credentials::load()?;
+
     println!("base-url       = {}", config.base_url);
     println!(
         "default-model  = {}",
         config.default_model.as_deref().unwrap_or("(not set)")
     );
     println!(
+        "output-format  = {}",
+        config.output_format.as_deref().unwrap_or("(not set)")
+    );
+    println!(
         "api-key        = {}",
-        if config.api_key.is_some() {
+        if creds.api_key.is_some() {
             "***configured***"
         } else {
             "(not set)"
@@ -87,13 +101,14 @@ async fn list() -> Result<()> {
     );
     println!(
         "token          = {}",
-        if config.token.is_some() {
+        if creds.token.is_some() {
             "***configured***"
         } else {
             "(not set)"
         }
     );
-    println!("\nConfig file: {:?}", Config::config_path()?);
+    println!("\nConfig file:       {:?}", Config::config_path()?);
+    println!("Credentials file:  {:?}", Credentials::credentials_path()?);
     Ok(())
 }
 
