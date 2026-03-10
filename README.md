@@ -1,6 +1,8 @@
 # FlowLeap CLI
 
-A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Search patents, chat with AI models, run OCR, and more — all from your terminal.
+One CLI for FlowLeap Patent AI — built for humans and AI agents.
+
+A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Search patents, chat with AI models, run OCR, and more — all from your terminal. Ships with 20+ Agent Skills (SKILL.md files) for seamless AI agent integration.
 
 ## Installation
 
@@ -112,6 +114,59 @@ CLI flags > environment variables > config file
 --dry-run           Show request details without executing
 --verbose, -v       Show verbose request/response details
 ```
+
+## AI Agent Integration
+
+The repo ships 20+ Agent Skills (`SKILL.md` files) — one for every CLI command, plus personas and multi-step recipes. Skills are structured Markdown files that any LLM can read natively.
+
+### Skill Categories
+
+| Category | Count | Description |
+|----------|-------|-------------|
+| **Service skills** (`flowleap-*`) | 8 | One per CLI command (chat, patent, ocr, etc.) |
+| **Persona skills** (`persona-*`) | 4 | Role-based bundles (patent attorney, researcher, etc.) |
+| **Recipe skills** (`recipe-*`) | 6 | Multi-step workflows (prior art search, FTO analysis, etc.) |
+
+### Skills Directory
+
+```
+skills/
+  flowleap-shared/SKILL.md        # Auth, global flags, common patterns
+  flowleap-auth/SKILL.md          # Authentication commands
+  flowleap-chat/SKILL.md          # AI chat completions
+  flowleap-patent/SKILL.md        # Patent search + query builder
+  flowleap-ocr/SKILL.md           # OCR document processing
+  flowleap-academic/SKILL.md      # Academic literature search
+  flowleap-models/SKILL.md        # List AI models
+  flowleap-ops/SKILL.md           # Direct EPO OPS API
+  persona-patent-attorney/SKILL.md
+  persona-researcher/SKILL.md
+  persona-startup-founder/SKILL.md
+  persona-ip-analyst/SKILL.md
+  recipe-prior-art-search/SKILL.md
+  recipe-patent-landscape/SKILL.md
+  recipe-patent-to-report/SKILL.md
+  recipe-claim-analysis/SKILL.md
+  recipe-freedom-to-operate/SKILL.md
+  recipe-academic-literature-review/SKILL.md
+```
+
+### Agent-Friendly Output
+
+Always use `--output json` when integrating with AI agents for reliable parsing:
+
+```bash
+flowleap patent search --query "solar panel" --output json
+flowleap chat --no-stream --output json "Analyze this patent"
+```
+
+### AI Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Entry point for Claude Code |
+| `AGENTS.md` | Architecture and contribution guide for AI agents |
+| `.claude/settings.json` | Claude Code configuration |
 
 ## Development
 
