@@ -85,6 +85,7 @@ The `skills/` directory contains SKILL.md files for AI agent consumption. Each s
 | `FLOWLEAP_API_KEY` | API key for authentication |
 | `FLOWLEAP_TOKEN` | Bearer token for authentication |
 | `FLOWLEAP_BASE_URL` | API base URL override |
+| `FLOWLEAP_WEBSITE_URL` | Website URL for OAuth flow |
 
 ## Testing
 

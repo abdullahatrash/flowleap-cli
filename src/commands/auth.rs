@@ -264,6 +264,7 @@ async fn logout() -> Result<()> {
 
 async fn status(ctx: &Context) -> Result<()> {
     println!("Base URL:  {}", ctx.config.base_url);
+    println!("Website:   {}", ctx.config.website_url);
 
     if ctx.credentials.token.is_some() {
         println!("Auth:      {} (token)", "Authenticated".green());

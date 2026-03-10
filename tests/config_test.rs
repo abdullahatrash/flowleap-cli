@@ -6,6 +6,7 @@ use tempfile::TempDir;
 fn test_config_toml_roundtrip() {
     let toml_content = r#"
 base_url = "https://custom.api.example.com"
+website_url = "https://custom.example.com"
 default_model = "patent-claude-sonnet"
 output_format = "json"
 "#;
@@ -14,12 +15,15 @@ output_format = "json"
     struct Config {
         #[serde(default)]
         base_url: String,
+        #[serde(default)]
+        website_url: String,
         default_model: Option<String>,
         output_format: Option<String>,
     }
 
     let config: Config = toml::from_str(toml_content).unwrap();
     assert_eq!(config.base_url, "https://custom.api.example.com");
+    assert_eq!(config.website_url, "https://custom.example.com");
     assert_eq!(
         config.default_model.as_deref(),
         Some("patent-claude-sonnet")
@@ -42,12 +46,19 @@ base_url = "https://api.flowleap.co"
     #[derive(Debug, serde::Deserialize)]
     struct Config {
         base_url: String,
+        #[serde(default = "default_website_url")]
+        website_url: String,
         default_model: Option<String>,
         output_format: Option<String>,
     }
 
+    fn default_website_url() -> String {
+        "https://flowleap.co".to_string()
+    }
+
     let config: Config = toml::from_str(toml_content).unwrap();
     assert_eq!(config.base_url, "https://api.flowleap.co");
+    assert_eq!(config.website_url, "https://flowleap.co");
     assert!(config.default_model.is_none());
     assert!(config.output_format.is_none());
 }
