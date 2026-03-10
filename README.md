@@ -1,6 +1,6 @@
 # FlowLeap CLI
 
-A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.dev) backend API. Search patents, chat with AI models, run OCR, and more — all from your terminal.
+A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Search patents, chat with AI models, run OCR, and more — all from your terminal.
 
 ## Installation
 
@@ -81,7 +81,7 @@ Configuration is stored in `~/.config/flowleap/config.toml`.
 flowleap config set default-model patent-claude-sonnet
 
 # Set base URL
-flowleap config set base-url https://api.flowleap.dev
+flowleap config set base-url https://api.flowleap.co
 
 # List all config
 flowleap config list
