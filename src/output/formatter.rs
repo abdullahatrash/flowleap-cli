@@ -21,6 +21,14 @@ pub fn print_table(rows: &[Value], columns: &[(&str, &str)]) {
                 let val = row.get(key).cloned().unwrap_or(Value::Null);
                 match val {
                     Value::String(s) => Cell::new(truncate(&s, 50)),
+                    Value::Array(arr) => {
+                        let items: String = arr
+                            .iter()
+                            .filter_map(|v| v.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        Cell::new(truncate(&items, 50))
+                    }
                     Value::Null => Cell::new("-"),
                     other => Cell::new(other.to_string()),
                 }
@@ -69,6 +77,15 @@ fn print_object_human(obj: &Value, columns: &[(&str, &str)]) {
         if let Some(val) = obj.get(key) {
             match val {
                 Value::String(s) => println!("  {}: {}", label, s),
+                Value::Array(arr) => {
+                    let items: Vec<&str> = arr
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .collect();
+                    if !items.is_empty() {
+                        println!("  {}: {}", label, items.join(", "));
+                    }
+                }
                 Value::Null => {}
                 other => println!("  {}: {}", label, other),
             }

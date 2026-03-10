@@ -64,14 +64,14 @@ async fn search(ctx: &Context, query: &str, source: &str, limit: u32) -> Result<
     let result = ctx.execute_json(req).await?;
 
     let columns = &[
-        ("publicationNumber", "Patent ID"),
+        ("docId", "Patent ID"),
         ("title", "Title"),
-        ("applicant", "Applicant"),
+        ("applicants", "Applicants"),
         ("publicationDate", "Date"),
     ];
 
-    if let Some(results) = result.get("results") {
-        output::print_value(&ctx.output_format, results, columns);
+    if let Some(docs) = result.get("docs") {
+        output::print_value(&ctx.output_format, docs, columns);
     } else {
         output::print_value(&ctx.output_format, &result, columns);
     }
