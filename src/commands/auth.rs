@@ -113,53 +113,43 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
     println!("Waiting for authorization callback on port {}...", port);
 
     // Wait for the callback
-    let callback = wait_for_callback(server, &state)?;
+    let auth_code = wait_for_callback(server, &state)?;
 
-    match callback {
-        CallbackResult::Code(auth_code) => {
-            println!("Authorization code received. Exchanging for token...");
+    println!("Authorization code received. Exchanging for token...");
 
-            // Exchange auth code for token
-            let token_url = format!("{}/oauth/token", base_url);
-            let client = reqwest::Client::new();
-            let resp = client
-                .post(&token_url)
-                .json(&serde_json::json!({
-                    "grant_type": "authorization_code",
-                    "client_id": CLIENT_ID,
-                    "code": auth_code,
-                    "redirect_uri": redirect_uri,
-                    "code_verifier": code_verifier,
-                }))
-                .send()
-                .await?;
+    // Exchange auth code for token
+    let token_url = format!("{}/oauth/token", base_url);
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&token_url)
+        .json(&serde_json::json!({
+            "grant_type": "authorization_code",
+            "client_id": CLIENT_ID,
+            "code": auth_code,
+            "redirect_uri": redirect_uri,
+            "code_verifier": code_verifier,
+        }))
+        .send()
+        .await?;
 
-            if !resp.status().is_success() {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                bail!("Token exchange failed ({}): {}", status, body);
-            }
-
-            let token_resp: serde_json::Value = resp.json().await?;
-
-            let mut creds = Credentials::load()?;
-
-            if let Some(access_token) = token_resp.get("access_token").and_then(|v| v.as_str()) {
-                creds.token = Some(access_token.to_string());
-            }
-            if let Some(refresh) = token_resp.get("refresh_token").and_then(|v| v.as_str()) {
-                creds.refresh_token = Some(refresh.to_string());
-            }
-
-            creds.save()?;
-        }
-        CallbackResult::Token(token_value) => {
-            // Implicit flow — token returned directly (Clerk session token)
-            let mut creds = Credentials::load()?;
-            creds.token = Some(token_value);
-            creds.save()?;
-        }
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        bail!("Token exchange failed ({}): {}", status, body);
     }
+
+    let token_resp: serde_json::Value = resp.json().await?;
+
+    let mut creds = Credentials::load()?;
+
+    if let Some(access_token) = token_resp.get("access_token").and_then(|v| v.as_str()) {
+        creds.token = Some(access_token.to_string());
+    }
+    if let Some(refresh) = token_resp.get("refresh_token").and_then(|v| v.as_str()) {
+        creds.refresh_token = Some(refresh.to_string());
+    }
+
+    creds.save()?;
 
     println!("{} Successfully authenticated!", "✓".green());
     println!(
@@ -168,11 +158,6 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
     );
 
     Ok(())
-}
-
-enum CallbackResult {
-    Code(String),
-    Token(String),
 }
 
 /// Parse query string parameters from a URL path
@@ -192,8 +177,8 @@ fn parse_query_params(url: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Wait for the OAuth callback and extract the authorization code or token
-fn wait_for_callback(server: tiny_http::Server, expected_state: &str) -> Result<CallbackResult> {
+/// Wait for the OAuth callback and extract the authorization code
+fn wait_for_callback(server: tiny_http::Server, expected_state: &str) -> Result<String> {
     let request = server
         .recv_timeout(std::time::Duration::from_secs(120))
         .map_err(|e| anyhow::anyhow!("Callback server error: {}", e))?
@@ -237,16 +222,12 @@ fn wait_for_callback(server: tiny_http::Server, expected_state: &str) -> Result<
     .with_header("Content-Type: text/html".parse::<tiny_http::Header>().unwrap());
     let _ = request.respond(response);
 
-    // Check for token (implicit flow) or code (authorization code flow)
-    if let Some((_, token)) = params.iter().find(|(k, _)| k == "access_token") {
-        return Ok(CallbackResult::Token(token.clone()));
-    }
-
+    // Extract the authorization code
     if let Some((_, code)) = params.iter().find(|(k, _)| k == "code") {
-        return Ok(CallbackResult::Code(code.clone()));
+        return Ok(code.clone());
     }
 
-    bail!("No authorization code or token in callback URL")
+    bail!("No authorization code in callback URL")
 }
 
 /// Simple URL encoding for query parameter values
