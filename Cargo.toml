@@ -1,0 +1,54 @@
+[package]
+name = "flowleap-cli"
+version = "0.1.0"
+edition = "2021"
+description = "One CLI for FlowLeap Patent AI — built for humans and AI agents"
+authors = ["FlowLeap"]
+license = "MIT"
+
+[[bin]]
+name = "flowleap"
+path = "src/main.rs"
+
+[dependencies]
+# CLI framework
+clap = { version = "4", features = ["derive", "env", "color"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
+
+# JSON
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Config management
+dirs = "6"
+
+# Terminal output
+colored = "3"
+comfy-table = "7"
+indicatif = "0.17"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# SSE streaming
+eventsource-stream = "0.2"
+futures = "0.3"
+tokio-stream = "0.1"
+
+# File I/O
+tokio-util = { version = "0.7", features = ["io"] }
+
+# URL opening for OAuth
+open = "5"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
