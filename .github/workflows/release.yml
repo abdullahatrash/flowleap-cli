@@ -109,8 +109,9 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cd npm
+          # install.mjs reads VERSION from package.json at install time,
+          # so bumping package.json here is sufficient.
           sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
-          sed -i "s/const VERSION = \".*\"/const VERSION = \"$GITHUB_REF_NAME\"/" install.mjs
 
       - name: Publish to npm
         run: cd npm && npm publish --access public
