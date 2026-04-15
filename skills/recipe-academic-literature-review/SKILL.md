@@ -6,7 +6,7 @@ metadata:
   category: "recipe"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-academic", "flowleap-patent", "flowleap-ocr"]
+    skills: ["flowleap-shared", "flowleap-academic", "flowleap-patent"]
 ---
 
 # Recipe: Academic Literature Review
@@ -28,15 +28,8 @@ flowleap patent build-query "<research topic>"
 flowleap patent search --query "<generated CQL>" --limit 20 --output json
 ```
 
-### Step 3: OCR Legacy Documents (if needed)
-
-```bash
-flowleap ocr extract paper.pdf --format markdown
-```
-
 ## Output
 
 Combined dataset of:
 - Academic papers (title, authors, year, source)
 - Related patents (publication number, title, applicant, date)
-- OCR-extracted text from legacy documents

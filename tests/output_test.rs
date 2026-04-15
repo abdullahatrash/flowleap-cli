@@ -102,17 +102,3 @@ fn test_academic_search_response() {
     assert_eq!(results[0]["title"], "Machine Learning in Patent Analysis");
     assert_eq!(results[0]["year"], 2024);
 }
-
-/// Test OCR response parsing
-#[test]
-fn test_ocr_response() {
-    let response = json!({
-        "text": "This is extracted text from the document.",
-        "pages": 3
-    });
-
-    assert_eq!(
-        response.get("text").and_then(|t| t.as_str()),
-        Some("This is extracted text from the document.")
-    );
-}

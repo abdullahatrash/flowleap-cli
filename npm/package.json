@@ -1,6 +1,6 @@
 {
   "name": "flowleap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One CLI for FlowLeap Patent AI — built for humans and AI agents",
   "bin": {
     "flowleap": "bin/flowleap"
@@ -14,8 +14,7 @@
     "cli",
     "flowleap",
     "epo",
-    "ops",
-    "ocr"
+    "ops"
   ],
   "author": "FlowLeap",
   "type": "module",

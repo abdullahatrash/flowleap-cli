@@ -1,6 +1,6 @@
 [package]
 name = "flowleap-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "One CLI for FlowLeap Patent AI — built for humans and AI agents"
 authors = ["FlowLeap"]
@@ -18,7 +18,7 @@ clap = { version = "4", features = ["derive", "env", "color"] }
 tokio = { version = "1", features = ["full"] }
 
 # HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # JSON & serialization
 serde = { version = "1", features = ["derive"] }
@@ -36,9 +36,6 @@ indicatif = "0.17"
 # Error handling
 anyhow = "1"
 thiserror = "2"
-
-# File I/O
-tokio-util = { version = "0.7", features = ["io"] }
 
 # URL opening for OAuth
 open = "5"

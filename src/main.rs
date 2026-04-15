@@ -1,11 +1,7 @@
-mod client;
-mod commands;
-mod config;
-mod output;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use commands::{academic, auth, config_cmd, ocr, ops, patent};
+use flowleap_cli::commands::{academic, auth, config_cmd, ops, patent};
+use flowleap_cli::{client, config};
 
 /// One CLI for FlowLeap Patent AI — built for humans and AI agents.
 #[derive(Parser)]
@@ -13,27 +9,27 @@ use commands::{academic, auth, config_cmd, ocr, ops, patent};
 #[command(propagate_version = true)]
 struct Cli {
     /// API base URL
-    #[arg(long, env = "FLOWLEAP_BASE_URL")]
+    #[arg(long, env = "FLOWLEAP_BASE_URL", global = true)]
     base_url: Option<String>,
 
     /// API key (overrides stored credentials)
-    #[arg(long, env = "FLOWLEAP_API_KEY")]
+    #[arg(long, env = "FLOWLEAP_API_KEY", global = true)]
     api_key: Option<String>,
 
     /// Bearer token (overrides stored credentials)
-    #[arg(long, env = "FLOWLEAP_TOKEN")]
+    #[arg(long, env = "FLOWLEAP_TOKEN", global = true)]
     token: Option<String>,
 
     /// Output format
-    #[arg(long, default_value = "human", value_parser = ["json", "table", "human"])]
+    #[arg(long, default_value = "human", value_parser = ["json", "table", "human"], global = true)]
     output: String,
 
     /// Show request details without executing
-    #[arg(long)]
+    #[arg(long, global = true)]
     dry_run: bool,
 
     /// Show verbose request/response details
-    #[arg(long, short)]
+    #[arg(long, short, global = true)]
     verbose: bool,
 
     #[command(subcommand)]
@@ -48,20 +44,10 @@ enum Commands {
     Patent(patent::PatentArgs),
     /// Direct EPO OPS API commands
     Ops(ops::OpsArgs),
-    /// OCR document processing
-    Ocr(ocr::OcrArgs),
     /// Search academic literature
     Academic(academic::AcademicArgs),
     /// Manage CLI configuration
     Config(config_cmd::ConfigArgs),
-    /// Discover available commands and API schema
-    Schema(SchemaArgs),
-}
-
-#[derive(Parser)]
-struct SchemaArgs {
-    /// Service or service.resource.method to inspect
-    path: Option<String>,
 }
 
 #[tokio::main]
@@ -89,46 +75,14 @@ async fn main() -> Result<()> {
         output_format: cli.output.clone(),
         dry_run: cli.dry_run,
         verbose: cli.verbose,
+        http: reqwest::Client::new(),
     };
 
     match cli.command {
         Commands::Auth(args) => auth::run(&ctx, args).await,
         Commands::Patent(args) => patent::run(&ctx, args).await,
         Commands::Ops(args) => ops::run(&ctx, args).await,
-        Commands::Ocr(args) => ocr::run(&ctx, args).await,
         Commands::Academic(args) => academic::run(&ctx, args).await,
         Commands::Config(args) => config_cmd::run(&ctx, args).await,
-        Commands::Schema(args) => run_schema(&ctx, args).await,
     }
-}
-
-async fn run_schema(_ctx: &client::Context, args: SchemaArgs) -> Result<()> {
-    let services = vec![
-        ("auth", "Authentication commands (login, logout, status)"),
-        ("patent", "Patent search, query building, claim analysis"),
-        (
-            "ops",
-            "Direct EPO OPS API (biblio, claims, family, legal, ...)",
-        ),
-        ("ocr", "Document OCR processing via Mistral"),
-        ("academic", "Academic literature search"),
-        ("config", "CLI configuration management"),
-    ];
-
-    match args.path {
-        None => {
-            println!("Available services:\n");
-            for (name, desc) in &services {
-                println!("  {:<12} {}", name, desc);
-            }
-            println!("\nUse 'flowleap schema <service>' for details.");
-        }
-        Some(path) => {
-            println!(
-                "Schema for '{}' — run 'flowleap {} --help' for full details.",
-                path, path
-            );
-        }
-    }
-    Ok(())
 }

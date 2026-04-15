@@ -44,9 +44,32 @@ async fn set(key: &str, value: &str) -> Result<()> {
     let mut config = Config::load()?;
 
     match key {
-        "base-url" => config.base_url = value.to_string(),
+        "base-url" => {
+            // Validate early so typos (missing scheme, htp://, etc.) surface
+            // here instead of as a cryptic reqwest error on first API call.
+            let parsed = reqwest::Url::parse(value)
+                .map_err(|e| anyhow::anyhow!("Invalid URL '{}': {}", value, e))?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                anyhow::bail!(
+                    "base-url must use http or https (got scheme '{}')",
+                    parsed.scheme()
+                );
+            }
+            if parsed.host_str().is_none() {
+                anyhow::bail!("base-url must include a host (got '{}')", value);
+            }
+            config.base_url = value.to_string();
+        }
         "default-model" => config.default_model = Some(value.to_string()),
-        "output-format" => config.output_format = Some(value.to_string()),
+        "output-format" => {
+            if !matches!(value, "json" | "table" | "human") {
+                anyhow::bail!(
+                    "output-format must be one of: json, table, human (got '{}')",
+                    value
+                );
+            }
+            config.output_format = Some(value.to_string());
+        }
         _ => anyhow::bail!(
             "Unknown config key: '{}'. Valid keys: base-url, default-model, output-format",
             key

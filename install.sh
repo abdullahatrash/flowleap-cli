@@ -35,9 +35,14 @@ DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET_NAM
 
 echo "Installing ${BINARY} ${LATEST} (${OS_NAME}/${ARCH_NAME})..."
 
-# Download
+# Download (show a progress bar on TTY, stay quiet when piped/non-interactive)
 TMPFILE=$(mktemp)
-curl -fsSL "$DOWNLOAD_URL" -o "$TMPFILE"
+if [ -t 2 ]; then
+  CURL_PROGRESS="--progress-bar"
+else
+  CURL_PROGRESS="-s"
+fi
+curl -fL -S $CURL_PROGRESS "$DOWNLOAD_URL" -o "$TMPFILE"
 chmod +x "$TMPFILE"
 
 # Install
