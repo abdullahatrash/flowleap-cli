@@ -2,7 +2,7 @@
 
 One CLI for FlowLeap Patent AI — built for humans and AI agents.
 
-A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Search patents, build queries, OCR documents, and explore academic literature — all from your terminal. Ships with 16 Agent Skills (SKILL.md files) for seamless AI agent integration.
+A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Search patents, build queries, and explore academic literature — all from your terminal. Ships with Agent Skills (SKILL.md files) for seamless AI agent integration.
 
 ## Installation
 
@@ -40,9 +40,6 @@ flowleap patent build-query "patents about lithium battery recycling filed by Te
 flowleap ops biblio EP1234567
 flowleap ops claims EP1234567
 
-# OCR a document
-flowleap ocr extract patent-scan.pdf
-
 # Search academic literature
 flowleap academic search "machine learning patent classification"
 ```
@@ -73,10 +70,8 @@ flowleap auth logout
 | `patent search` | Search patents (EPO/USPTO) |
 | `patent build-query` | Natural language → CQL query |
 | `ops` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |
-| `ocr extract` | Extract text from PDF/images |
 | `academic search` | Search academic literature |
 | `config` | Manage CLI configuration |
-| `schema` | Discover available services |
 
 ## Configuration
 
@@ -118,15 +113,15 @@ CLI flags > environment variables > config file
 
 ## AI Agent Integration
 
-The repo ships 16 Agent Skills (`SKILL.md` files) — one for every CLI command, plus personas and multi-step recipes. Skills are structured Markdown files that any LLM can read natively.
+The repo ships Agent Skills (`SKILL.md` files) — one for every CLI command, plus personas and multi-step recipes. Skills are structured Markdown files that any LLM can read natively.
 
 ### Skill Categories
 
-| Category | Count | Description |
-|----------|-------|-------------|
-| **Service skills** (`flowleap-*`) | 6 | One per CLI command (patent, ocr, ops, etc.) |
-| **Persona skills** (`persona-*`) | 4 | Role-based bundles (patent attorney, researcher, etc.) |
-| **Recipe skills** (`recipe-*`) | 6 | Multi-step workflows (prior art search, FTO analysis, etc.) |
+| Category | Description |
+|----------|-------------|
+| **Service skills** (`flowleap-*`) | One per CLI command (patent, ops, etc.) |
+| **Persona skills** (`persona-*`) | Role-based bundles (patent attorney, researcher, etc.) |
+| **Recipe skills** (`recipe-*`) | Multi-step workflows (prior art search, FTO analysis, etc.) |
 
 ### Skills Directory
 
@@ -135,7 +130,6 @@ skills/
   flowleap-shared/SKILL.md        # Auth, global flags, common patterns
   flowleap-auth/SKILL.md          # Authentication commands
   flowleap-patent/SKILL.md        # Patent search + query builder
-  flowleap-ocr/SKILL.md           # OCR document processing
   flowleap-academic/SKILL.md      # Academic literature search
   flowleap-ops/SKILL.md           # Direct EPO OPS API
   persona-patent-attorney/SKILL.md

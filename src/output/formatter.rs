@@ -93,10 +93,67 @@ fn print_object_human(obj: &Value, columns: &[(&str, &str)]) {
     }
 }
 
+/// Truncate a string to at most `max` characters (not bytes), appending "..."
+/// when truncation occurs. Unicode-safe: counts by `char`, never slices on a
+/// byte boundary mid-codepoint. For `max <= 3`, returns the first `max` chars
+/// without an ellipsis since "..." alone wouldn't fit.
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max - 3])
+    if max == 0 {
+        return String::new();
+    }
+    let char_count = s.chars().count();
+    if char_count <= max {
+        return s.to_string();
+    }
+    if max <= 3 {
+        return s.chars().take(max).collect();
+    }
+    let prefix: String = s.chars().take(max - 3).collect();
+    format!("{}...", prefix)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate;
+
+    #[test]
+    fn truncate_under_max() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_max() {
+        assert_eq!(truncate("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_over_max() {
+        assert_eq!(truncate("hello world", 8), "hello...");
+    }
+
+    #[test]
+    fn truncate_zero_does_not_panic() {
+        assert_eq!(truncate("anything", 0), "");
+    }
+
+    #[test]
+    fn truncate_small_max_does_not_panic() {
+        // max < 3 would have caused &s[..max-3] to underflow.
+        assert_eq!(truncate("hello", 1), "h");
+        assert_eq!(truncate("hello", 2), "he");
+        assert_eq!(truncate("hello", 3), "hel");
+    }
+
+    #[test]
+    fn truncate_unicode_boundary() {
+        // "résumé" is 6 chars but 8 bytes; naive byte slicing would panic.
+        assert_eq!(truncate("résumé", 10), "résumé");
+        assert_eq!(truncate("résuméé", 5), "ré...");
+    }
+
+    #[test]
+    fn truncate_multibyte_emoji() {
+        // Chinese characters are each 3 bytes. Must not split them.
+        assert_eq!(truncate("你好世界你好世界", 5), "你好...");
     }
 }

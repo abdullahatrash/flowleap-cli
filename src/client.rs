@@ -42,12 +42,6 @@ impl Context {
         self.apply_auth(req)
     }
 
-    /// Build a POST request with auth and multipart form
-    pub fn post_multipart(&self, path: &str, form: reqwest::multipart::Form) -> RequestBuilder {
-        let req = self.client().post(self.url(path)).multipart(form);
-        self.apply_auth(req)
-    }
-
     /// Execute a request, handling dry-run and verbose modes
     pub async fn execute(&self, req: RequestBuilder) -> Result<Response> {
         let req = req.build()?;

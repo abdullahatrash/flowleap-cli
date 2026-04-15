@@ -6,7 +6,7 @@ metadata:
   category: "persona"
   requires:
     bins: ["flowleap"]
-    skills: ["flowleap-shared", "flowleap-patent", "flowleap-academic", "flowleap-ocr"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-academic"]
 ---
 
 # Persona: Researcher
@@ -46,16 +46,7 @@ flowleap ops claims EP1234567
 flowleap ops description EP1234567
 ```
 
-### 4. OCR for Legacy Documents
-
-```bash
-# Extract text from scanned patents or papers
-flowleap ocr extract scanned-patent.pdf --format markdown
-flowleap ocr extract figure.png --format text
-```
-
 ## Tips
 
 - Use `flowleap academic search` for published research and `flowleap patent search` for IP
 - Combine both to identify gaps between academic research and filed patents
-- Use OCR for older documents not available in digital text format

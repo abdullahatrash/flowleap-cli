@@ -14,8 +14,7 @@
     "cli",
     "flowleap",
     "epo",
-    "ops",
-    "ocr"
+    "ops"
   ],
   "author": "FlowLeap",
   "type": "module",

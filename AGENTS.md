@@ -2,7 +2,7 @@
 
 ## Overview
 
-`flowleap` is a Rust CLI for the FlowLeap Patent AI backend API. It provides patent search, CQL query building, OCR, academic search, and direct EPO OPS access — designed for both human users and AI agents.
+`flowleap` is a Rust CLI for the FlowLeap Patent AI backend API. It provides patent search, CQL query building, academic search, and direct EPO OPS access — designed for both human users and AI agents.
 
 ## Build & Test
 
@@ -27,7 +27,6 @@ All four must pass before submitting changes.
 | `src/commands/auth.rs` | OAuth 2.0 Device Authorization flow, API key login, status |
 | `src/commands/patent.rs` | Patent search and CQL query builder |
 | `src/commands/academic.rs` | Academic literature search |
-| `src/commands/ocr.rs` | Multipart file upload OCR |
 | `src/commands/ops.rs` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |
 | `src/commands/config_cmd.rs` | CLI configuration management |
 
@@ -60,7 +59,6 @@ Three methods (checked in order):
 | `/v1/patent-search` | POST | Yes |
 | `/v1/build-patent-query` | POST | Yes |
 | `/v1/academic-search` | POST | Yes |
-| `/v1/ocr` | POST | Yes |
 | `/v1/ops/biblio?doc={id}` | GET | Yes |
 | `/v1/ops/abstract?doc={id}` | GET | Yes |
 | `/v1/ops/family?doc={id}` | GET | Yes |
@@ -87,7 +85,6 @@ Error `code` values: `MISSING_PARAM` (400), `NOT_FOUND` (404), `RATE_LIMITED` (4
 ## Security
 
 - Never output stored credentials (API keys, tokens) in logs or verbose mode
-- Validate file paths before upload (OCR command)
 - Use `--dry-run` for safety when testing mutating operations
 - Authorization header is stripped from verbose output
 

@@ -1,6 +1,5 @@
 pub mod academic;
 pub mod auth;
 pub mod config_cmd;
-pub mod ocr;
 pub mod ops;
 pub mod patent;
