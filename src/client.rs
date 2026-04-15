@@ -10,11 +10,12 @@ pub struct Context {
     pub output_format: String,
     pub dry_run: bool,
     pub verbose: bool,
+    pub http: Client,
 }
 
 impl Context {
-    fn client(&self) -> Client {
-        Client::new()
+    fn client(&self) -> &Client {
+        &self.http
     }
 
     pub fn url(&self, path: &str) -> String {

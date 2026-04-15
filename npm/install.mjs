@@ -1,11 +1,15 @@
-import { createWriteStream, chmodSync, mkdirSync, existsSync } from "fs";
+import { createWriteStream, chmodSync, mkdirSync, existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { get } from "https";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = "abdullahatrash/flowleap-cli";
-const VERSION = "v0.1.0";
+
+// Read version from package.json so the release tag stays in sync with the
+// published npm version automatically. Assumes release tags are named "v<version>".
+const pkg = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8"));
+const VERSION = `v${pkg.version}`;
 
 const PLATFORM_MAP = {
   "darwin-arm64": "flowleap-darwin-aarch64",

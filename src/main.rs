@@ -13,27 +13,27 @@ use commands::{academic, auth, config_cmd, ocr, ops, patent};
 #[command(propagate_version = true)]
 struct Cli {
     /// API base URL
-    #[arg(long, env = "FLOWLEAP_BASE_URL")]
+    #[arg(long, env = "FLOWLEAP_BASE_URL", global = true)]
     base_url: Option<String>,
 
     /// API key (overrides stored credentials)
-    #[arg(long, env = "FLOWLEAP_API_KEY")]
+    #[arg(long, env = "FLOWLEAP_API_KEY", global = true)]
     api_key: Option<String>,
 
     /// Bearer token (overrides stored credentials)
-    #[arg(long, env = "FLOWLEAP_TOKEN")]
+    #[arg(long, env = "FLOWLEAP_TOKEN", global = true)]
     token: Option<String>,
 
     /// Output format
-    #[arg(long, default_value = "human", value_parser = ["json", "table", "human"])]
+    #[arg(long, default_value = "human", value_parser = ["json", "table", "human"], global = true)]
     output: String,
 
     /// Show request details without executing
-    #[arg(long)]
+    #[arg(long, global = true)]
     dry_run: bool,
 
     /// Show verbose request/response details
-    #[arg(long, short)]
+    #[arg(long, short, global = true)]
     verbose: bool,
 
     #[command(subcommand)]
@@ -89,6 +89,7 @@ async fn main() -> Result<()> {
         output_format: cli.output.clone(),
         dry_run: cli.dry_run,
         verbose: cli.verbose,
+        http: reqwest::Client::new(),
     };
 
     match cli.command {
