@@ -21,6 +21,30 @@ curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/in
 cargo install --git https://github.com/abdullahatrash/flowleap-cli.git
 ```
 
+## Updating
+
+**npm / pnpm / yarn:**
+```bash
+npm i -g flowleap@latest          # or: npm update -g flowleap
+pnpm add -g flowleap@latest
+yarn global upgrade flowleap
+```
+
+**install.sh:** re-run the same one-liner — it overwrites the existing binary.
+```bash
+curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
+```
+
+**From source:** `--force` is required to overwrite the existing binary.
+```bash
+cargo install --git https://github.com/abdullahatrash/flowleap-cli.git --force
+```
+
+Verify the upgrade:
+```bash
+flowleap --version
+```
+
 ## Quick Start
 
 ```bash
