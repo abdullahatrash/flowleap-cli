@@ -39,10 +39,69 @@ const url = `https://github.com/${REPO}/releases/download/${VERSION}/${asset}`;
 
 console.log(`Downloading flowleap ${VERSION} for ${key}...`);
 
+function formatBytes(n) {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function renderBar(fraction, width = 24) {
+  const filled = Math.max(0, Math.min(width, Math.round(fraction * width)));
+  const empty = width - filled;
+  return `[${"=".repeat(filled)}${filled > 0 && empty > 0 ? ">" : ""}${" ".repeat(Math.max(0, empty - (filled > 0 ? 1 : 0)))}]`;
+}
+
+function createProgressReporter(total) {
+  const isTTY = Boolean(process.stdout.isTTY);
+  const hasTotal = Number.isFinite(total) && total > 0;
+  let received = 0;
+  let lastRenderAt = 0;
+  let lastMilestone = -1;
+
+  const update = (chunkSize) => {
+    received += chunkSize;
+    const now = Date.now();
+
+    if (isTTY) {
+      // Throttle TTY redraws to ~10 Hz
+      if (now - lastRenderAt < 100 && received !== total) return;
+      lastRenderAt = now;
+      if (hasTotal) {
+        const fraction = received / total;
+        const pct = Math.floor(fraction * 100);
+        const line = `  ${renderBar(fraction)} ${formatBytes(received)} / ${formatBytes(total)} (${pct}%)`;
+        process.stdout.write(`\r${line}`);
+      } else {
+        process.stdout.write(`\r  Downloaded ${formatBytes(received)}...`);
+      }
+    } else if (hasTotal) {
+      // Non-TTY: emit milestone lines so CI logs stay readable
+      const pct = Math.floor((received / total) * 100);
+      const milestone = Math.floor(pct / 25) * 25;
+      if (milestone > lastMilestone && milestone <= 100) {
+        lastMilestone = milestone;
+        console.log(`  ${milestone}% (${formatBytes(received)} / ${formatBytes(total)})`);
+      }
+    }
+  };
+
+  const finish = () => {
+    if (isTTY) process.stdout.write("\n");
+  };
+
+  return { update, finish };
+}
+
 function download(url) {
   return new Promise((resolve, reject) => {
     get(url, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
         download(res.headers.location).then(resolve).catch(reject);
         return;
       }
@@ -50,16 +109,29 @@ function download(url) {
         reject(new Error(`Download failed: HTTP ${res.statusCode}`));
         return;
       }
+
+      const total = parseInt(res.headers["content-length"] || "", 10);
+      const progress = createProgressReporter(total);
+
       const file = createWriteStream(binPath);
+      res.on("data", (chunk) => progress.update(chunk.length));
       res.pipe(file);
       file.on("finish", () => {
         file.close();
+        progress.finish();
         if (!isWindows) {
           chmodSync(binPath, 0o755);
         }
         resolve();
       });
-      file.on("error", reject);
+      file.on("error", (err) => {
+        progress.finish();
+        reject(err);
+      });
+      res.on("error", (err) => {
+        progress.finish();
+        reject(err);
+      });
     }).on("error", reject);
   });
 }
