@@ -61,8 +61,28 @@ Three methods (checked in order):
 | `/v1/build-patent-query` | POST | Yes |
 | `/v1/academic-search` | POST | Yes |
 | `/v1/ocr` | POST | Yes |
+| `/v1/ops/biblio?doc={id}` | GET | Yes |
+| `/v1/ops/abstract?doc={id}` | GET | Yes |
+| `/v1/ops/family?doc={id}` | GET | Yes |
+| `/v1/ops/legal?doc={id}` | GET | Yes |
+| `/v1/ops/fulltext/claims?doc={id}&lang={lang}` | GET | Yes |
+| `/v1/ops/fulltext/description?doc={id}&lang={lang}` | GET | Yes |
 | `/api/profile` | GET | Yes |
 | `/api/usage` | GET | Yes |
+
+OPS endpoints wrap payloads in a response envelope:
+
+```json
+{ "success": true, "data": { /* endpoint-specific */ }, "cached": false, "executionTimeMs": 432 }
+```
+
+On failure:
+
+```json
+{ "success": false, "error": "...", "code": "NOT_FOUND", "status": 404 }
+```
+
+Error `code` values: `MISSING_PARAM` (400), `NOT_FOUND` (404), `RATE_LIMITED` (429), `INTERNAL_ERROR` (500). Canonical endpoint list: the backend's `GET /v1/ops/health` response. Live OpenAPI spec: `<base-url>/docs/json` (requires `ENABLE_SWAGGER=true` in production).
 
 ## Security
 

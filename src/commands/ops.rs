@@ -1,6 +1,6 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::client::Context;
 use crate::output;
@@ -36,11 +36,17 @@ enum OpsCommand {
     Claims {
         /// Patent document number
         doc: String,
+        /// Language code (e.g., en, de, fr)
+        #[arg(long, default_value = "en")]
+        lang: String,
     },
     /// Get full description text for a patent
     Description {
         /// Patent document number
         doc: String,
+        /// Language code (e.g., en, de, fr)
+        #[arg(long, default_value = "en")]
+        lang: String,
     },
     /// Get patent family members
     Family {
@@ -64,12 +70,16 @@ pub async fn run(ctx: &Context, args: OpsArgs) -> Result<()> {
 
     match args.command {
         OpsCommand::Search { cql, start, end } => search(ctx, &cql, start, end).await,
-        OpsCommand::Biblio { doc } => fetch_doc(ctx, "biblio", &doc).await,
-        OpsCommand::Claims { doc } => fetch_doc(ctx, "claims", &doc).await,
-        OpsCommand::Description { doc } => fetch_doc(ctx, "description", &doc).await,
-        OpsCommand::Family { doc } => fetch_doc(ctx, "family", &doc).await,
-        OpsCommand::Legal { doc } => fetch_doc(ctx, "legal", &doc).await,
-        OpsCommand::Abstract { doc } => fetch_doc(ctx, "abstract", &doc).await,
+        OpsCommand::Biblio { doc } => fetch_doc(ctx, "biblio", &doc, None).await,
+        OpsCommand::Claims { doc, lang } => {
+            fetch_doc(ctx, "fulltext/claims", &doc, Some(&lang)).await
+        }
+        OpsCommand::Description { doc, lang } => {
+            fetch_doc(ctx, "fulltext/description", &doc, Some(&lang)).await
+        }
+        OpsCommand::Family { doc } => fetch_doc(ctx, "family", &doc, None).await,
+        OpsCommand::Legal { doc } => fetch_doc(ctx, "legal", &doc, None).await,
+        OpsCommand::Abstract { doc } => fetch_doc(ctx, "abstract", &doc, None).await,
     }
 }
 
@@ -99,17 +109,41 @@ async fn search(ctx: &Context, cql: &str, start: u32, end: u32) -> Result<()> {
     Ok(())
 }
 
-async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str) -> Result<()> {
-    let path = format!("/v1/patent-search/{}?doc={}", endpoint, doc);
-    let req = ctx.get(&path);
-    let result = ctx.execute_json(req).await?;
-
-    if ctx.output_format == "json" {
-        output::print_json(&result);
-    } else {
-        // Human-readable: print the relevant text content
-        output::print_json(&result);
+async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>) -> Result<()> {
+    let mut path = format!("/v1/ops/{}?doc={}", endpoint, doc);
+    if let Some(l) = lang {
+        path.push_str(&format!("&lang={}", l));
     }
+
+    let req = ctx.get(&path);
+    let envelope = ctx.execute_json_allow_error(req).await?;
+
+    // Ops endpoints wrap payloads in a success/data envelope:
+    //   { "success": true,  "data": {...}, "cached": bool, "executionTimeMs": n }
+    //   { "success": false, "error": "...", "code": "NOT_FOUND", "status": 404 }
+    if envelope.get("success") == Some(&Value::Bool(false)) {
+        let code = envelope
+            .get("code")
+            .and_then(|v| v.as_str())
+            .unwrap_or("ERROR");
+        let message = envelope
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown error");
+        bail!("{}: {}", code, message);
+    }
+
+    if ctx.verbose {
+        if let Some(cached) = envelope.get("cached").and_then(|v| v.as_bool()) {
+            eprintln!("  cached: {}", cached);
+        }
+        if let Some(ms) = envelope.get("executionTimeMs").and_then(|v| v.as_u64()) {
+            eprintln!("  executionTimeMs: {}", ms);
+        }
+    }
+
+    let data = envelope.get("data").unwrap_or(&envelope);
+    output::print_json(data);
 
     Ok(())
 }

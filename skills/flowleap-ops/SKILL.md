@@ -34,13 +34,22 @@ flowleap ops search --cql <query> [flags]
 All document commands take a patent document number (e.g., `EP1234567`):
 
 ```bash
-flowleap ops biblio <doc>        # Bibliographic data
-flowleap ops claims <doc>        # Claims text
-flowleap ops description <doc>   # Full description
-flowleap ops family <doc>        # Patent family members
-flowleap ops legal <doc>         # Legal status events
-flowleap ops abstract <doc>      # Abstract text
+flowleap ops biblio <doc>                    # Bibliographic data
+flowleap ops claims <doc> [--lang en]        # Claims text (defaults to English)
+flowleap ops description <doc> [--lang en]   # Full description (defaults to English)
+flowleap ops family <doc>                    # Patent family members
+flowleap ops legal <doc>                     # Legal status events
+flowleap ops abstract <doc>                  # Abstract text
 ```
+
+Doc IDs are normalized server-side — `ep1.000.000` and `EP1000000` both resolve.
+
+### Response envelope
+
+OPS endpoints return data wrapped in a success/error envelope. The CLI unwraps
+`data` automatically so `--output json` prints just the payload. Pass `--verbose`
+to see cache status and execution time. Errors use `code` values: `MISSING_PARAM`,
+`NOT_FOUND`, `RATE_LIMITED`, `INTERNAL_ERROR`.
 
 ## Examples
 
@@ -51,14 +60,17 @@ flowleap ops search --cql "ti=solar AND pa=Tesla"
 # Get bibliographic data
 flowleap ops biblio EP1234567
 
-# Get claims
-flowleap ops claims US10123456
+# Get claims in German
+flowleap ops claims US10123456 --lang de
 
 # Get family members (JSON for agents)
 flowleap ops family EP1234567 --output json
 
 # Search with pagination
 flowleap ops search --cql "ti=battery" --start 1 --end 50
+
+# Verbose shows cache status and timing
+flowleap ops biblio EP1234567 --verbose
 ```
 
 ## Workflow: Deep Patent Analysis

@@ -95,6 +95,51 @@ impl Context {
         Ok(json)
     }
 
+    /// Execute and parse JSON body WITHOUT bailing on non-2xx status.
+    /// Lets the caller inspect application-level error envelopes (e.g. ops
+    /// endpoints return `{ success: false, error, code }` alongside a 4xx status).
+    /// Still respects dry-run and verbose modes via execute_raw().
+    pub async fn execute_json_allow_error(&self, req: RequestBuilder) -> Result<Value> {
+        let req = req.build()?;
+
+        if self.verbose {
+            eprintln!("{} {}", req.method(), req.url());
+            for (key, val) in req.headers() {
+                if key != "authorization" {
+                    eprintln!("  {}: {}", key, val.to_str().unwrap_or("(binary)"));
+                }
+            }
+        }
+
+        if self.dry_run {
+            eprintln!("[dry-run] {} {}", req.method(), req.url());
+            if let Some(body) = req.body() {
+                if let Some(bytes) = body.as_bytes() {
+                    if let Ok(json) = serde_json::from_slice::<Value>(bytes) {
+                        eprintln!("[dry-run] Body: {}", serde_json::to_string_pretty(&json)?);
+                    }
+                }
+            }
+            bail!("Dry run — no request was sent");
+        }
+
+        let resp = self.client().execute(req).await?;
+
+        if self.verbose {
+            eprintln!("  Status: {}", resp.status());
+        }
+
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+
+        // Try to parse as JSON; if not JSON and non-2xx, surface as generic error.
+        match serde_json::from_str::<Value>(&body) {
+            Ok(json) => Ok(json),
+            Err(_) if !status.is_success() => bail!("API error ({}): {}", status, body),
+            Err(e) => bail!("Failed to parse response: {}", e),
+        }
+    }
+
     /// Require authentication, returning an error if not configured
     pub fn require_auth(&self) -> Result<()> {
         if self.credentials.auth_header().is_none() {
