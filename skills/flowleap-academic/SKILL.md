@@ -44,12 +44,18 @@ flowleap academic search "neural network optimization" --output json
 
 ```json
 {
-  "results": [
+  "success": true,
+  "query": "machine learning patent classification",
+  "total": 1,
+  "cached": false,
+  "papers": [
     {
       "title": "Machine Learning in Patent Analysis",
-      "authors": "Smith, J.; Doe, A.",
-      "year": 2024,
-      "source": "Nature AI"
+      "authors": ["Smith, J.", "Doe, A."],
+      "year": "2024",
+      "source": "arxiv",
+      "url": "https://example.com/paper",
+      "abstract": "..."
     }
   ]
 }

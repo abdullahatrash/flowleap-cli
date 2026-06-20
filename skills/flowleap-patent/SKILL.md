@@ -45,16 +45,15 @@ flowleap patent search --query "CRISPR gene editing" --output json
 #### Response Format (JSON)
 
 ```json
-{
-  "results": [
-    {
-      "publicationNumber": "EP1234567",
-      "title": "Solar Panel with Improved Efficiency",
-      "applicant": "SolarCorp Inc.",
-      "publicationDate": "2024-01-15"
-    }
-  ]
-}
+[
+  {
+    "docId": "EP1234567.A1",
+    "title": "Solar Panel with Improved Efficiency",
+    "applicants": ["SolarCorp Inc."],
+    "publicationDate": "20240115",
+    "abstract": "..."
+  }
+]
 ```
 
 ### Build CQL Query
@@ -64,6 +63,7 @@ flowleap patent build-query <description> [flags]
 ```
 
 Posts to `/v1/build-patent-query`. Converts natural language to CQL (Common Query Language) for EPO patent searches.
+Use `--dry-run` to verify the request shape without calling the backend model.
 
 | Flag | Description | Default |
 |------|-------------|---------|

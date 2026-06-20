@@ -39,15 +39,15 @@ flowleap auth login --api-key sk-...
 # Search patents
 flowleap patent search --query "solar panel efficiency"
 
-# Build a CQL query from natural language
-flowleap patent build-query "patents about lithium battery recycling filed by Tesla"
+# Build a CQL query from natural language; dry-run verifies request shape
+flowleap patent build-query "patents about lithium battery recycling filed by Tesla" --dry-run
 
 # Direct EPO OPS access
 flowleap ops biblio EP1234567
 flowleap ops claims EP1234567
 
 # USPTO Open Data Portal
-flowleap uspto search --query "inventionTitle:wireless charging"
+flowleap uspto search --query "wireless charging" --limit 3
 flowleap uspto grant 11800000
 
 # Search academic literature
@@ -62,6 +62,35 @@ flowleap --json citation search 16000001 --size 20
 flowleap --json api request get /v1/health
 flowleap --json api request post /v1/patent-search --body-file request.json --dry-run
 ```
+
+## Smoke Tests
+
+Use these commands after installing or publishing a new version. They are also good examples for agents because they use `--json` and make required flags explicit.
+
+```bash
+# Installed version
+flowleap --version
+
+# Production health and auth/config check
+flowleap --json doctor --base-url https://api.flowleap.co
+
+# Patent search requires --query
+flowleap --json patent search --query "battery cooling system" --limit 3 --base-url https://api.flowleap.co
+flowleap --json uspto search --query "wireless charging" --limit 3 --base-url https://api.flowleap.co
+
+# These commands use positional text arguments
+flowleap --json academic search "solid state battery electrolyte" --limit 3 --base-url https://api.flowleap.co
+```
+
+When debugging request shape, add `--dry-run`. This is also the safest way to test endpoints whose backend query contract may still be changing:
+
+```bash
+flowleap --json patent search --query "battery cooling system" --limit 1 --dry-run
+flowleap --json uspto search --query "wireless charging" --limit 1 --base-url https://api.flowleap.co --dry-run
+flowleap --json patent build-query "battery cooling system for electric vehicles" --base-url https://api.flowleap.co --dry-run
+```
+
+`--dry-run` shows the exact method, URL, auth status, and JSON body the CLI will send.
 
 ## Authentication
 

@@ -65,8 +65,11 @@ pub async fn run(ctx: &Context, args: UsptoArgs) -> Result<()> {
 
 async fn search(ctx: &Context, query: &str, limit: u32) -> Result<()> {
     let body = json!({
-        "query": query,
-        "limit": limit,
+        "q": query,
+        "pagination": {
+            "limit": limit,
+            "offset": 0,
+        },
     });
 
     let req = ctx.post("/v1/patent-search-uspto/search", &body);
@@ -136,7 +139,9 @@ async fn build_query(ctx: &Context, description: &str, model: Option<&str>) -> R
 
 fn print_uspto_collection(ctx: &Context, result: &serde_json::Value) {
     let columns = search_columns();
-    if let Some(results) = result.get("results") {
+    if let Some(results) = result.get("patentFileWrapperDataBag") {
+        output::print_value(&ctx.output_format, results, columns);
+    } else if let Some(results) = result.get("results") {
         output::print_value(&ctx.output_format, results, columns);
     } else if let Some(docs) = result.get("docs") {
         output::print_value(&ctx.output_format, docs, columns);

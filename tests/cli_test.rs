@@ -49,6 +49,45 @@ fn dry_run_succeeds_without_credentials() {
 }
 
 #[test]
+fn uspto_search_dry_run_uses_odp_request_shape() {
+    let temp_home = tempfile::tempdir().expect("create temp home");
+    let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
+        .env("HOME", temp_home.path())
+        .env("FLOWLEAP_API_KEY", "fl_org_test_secret")
+        .env_remove("FLOWLEAP_TOKEN")
+        .args([
+            "--json",
+            "uspto",
+            "search",
+            "--query",
+            "wireless charging",
+            "--limit",
+            "1",
+            "--dry-run",
+        ])
+        .output()
+        .expect("run uspto search dry-run");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let value: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is json");
+
+    assert_eq!(value["dryRun"], true);
+    assert_eq!(value["method"], "POST");
+    assert_eq!(value["authenticated"], true);
+    assert_eq!(
+        value["url"],
+        "https://api.flowleap.co/v1/patent-search-uspto/search"
+    );
+    assert_eq!(value["body"]["q"], "wireless charging");
+    assert_eq!(value["body"]["pagination"]["limit"], 1);
+    assert_eq!(value["body"]["pagination"]["offset"], 0);
+    assert!(value["body"].get("query").is_none());
+    assert!(value["body"].get("limit").is_none());
+}
+
+#[test]
 fn exposes_agent_first_commands() {
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .arg("--help")

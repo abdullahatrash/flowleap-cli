@@ -46,13 +46,33 @@ Use `--json` for agent parsing. Use `--dry-run` before protected calls when auth
 
 ```bash
 flowleap --json patent search --query "solar panel efficiency" --limit 10
-flowleap --json uspto search --query "inventionTitle:wireless charging" --limit 10
+flowleap --json uspto search --query "wireless charging" --limit 10
 flowleap --json ops biblio EP1234567
 flowleap --json academic search "machine learning patent classification" --limit 10
 flowleap --json npl "lithium-ion battery thermal management" --limit 10
 flowleap --json legal search "doctrine of equivalents" --limit 10
 flowleap --json citation search 16000001 --size 20
 ```
+
+Argument shapes differ by command:
+
+```bash
+# These require --query
+flowleap --json patent search --query "battery cooling system" --limit 3
+flowleap --json uspto search --query "wireless charging" --limit 3
+
+# These use positional text arguments
+flowleap --json patent build-query "battery cooling system for electric vehicles" --dry-run
+flowleap --json academic search "solid state battery electrolyte" --limit 3
+```
+
+When checking whether the CLI is sending the intended request, prefer `--dry-run`:
+
+```bash
+flowleap --json patent search --query "battery cooling system" --limit 1 --dry-run
+```
+
+If dry-run shows the expected JSON body but the live response shape or count differs, treat that as backend behavior to investigate separately.
 
 ## Raw Escape Hatch
 
