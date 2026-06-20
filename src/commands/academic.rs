@@ -39,7 +39,7 @@ async fn search(ctx: &Context, query: &str, limit: u32) -> Result<()> {
     });
 
     let req = ctx.post("/v1/academic-search", &body);
-    let result = ctx.execute_json(req).await?;
+    let result = ctx.execute_json_body_or_error(req).await?;
 
     let columns = &[
         ("title", "Title"),

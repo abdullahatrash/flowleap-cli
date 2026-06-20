@@ -61,7 +61,7 @@ async fn search(ctx: &Context, query: &str, source: &str, limit: u32) -> Result<
     });
 
     let req = ctx.post("/v1/patent-search", &body);
-    let result = ctx.execute_json(req).await?;
+    let result = ctx.execute_json_body_or_error(req).await?;
 
     let columns = &[
         ("docId", "Patent ID"),
@@ -89,7 +89,7 @@ async fn build_query(ctx: &Context, description: &str, model: Option<&str>) -> R
     }
 
     let req = ctx.post("/v1/build-patent-query", &body);
-    let result = ctx.execute_json(req).await?;
+    let result = ctx.execute_json_body_or_error(req).await?;
 
     if ctx.output_format == "json" {
         output::print_json(&result);

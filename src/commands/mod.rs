@@ -1,5 +1,12 @@
 pub mod academic;
+pub mod api;
 pub mod auth;
+pub mod citation;
 pub mod config_cmd;
+pub mod doctor;
+pub mod health;
+pub mod legal;
+pub mod npl;
 pub mod ops;
 pub mod patent;
+pub mod uspto;

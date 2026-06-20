@@ -1,8 +1,8 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
 
-use crate::client::Context;
+use crate::client::{encode_url_component, Context};
 use crate::output;
 
 #[derive(Parser)]
@@ -91,7 +91,7 @@ async fn search(ctx: &Context, cql: &str, start: u32, end: u32) -> Result<()> {
     });
 
     let req = ctx.post("/v1/patent-search", &body);
-    let result = ctx.execute_json(req).await?;
+    let result = ctx.execute_json_body_or_error(req).await?;
 
     let columns = &[
         ("publicationNumber", "Patent ID"),
@@ -110,9 +110,9 @@ async fn search(ctx: &Context, cql: &str, start: u32, end: u32) -> Result<()> {
 }
 
 async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>) -> Result<()> {
-    let mut path = format!("/v1/ops/{}?doc={}", endpoint, doc);
+    let mut path = format!("/v1/ops/{}?doc={}", endpoint, encode_url_component(doc));
     if let Some(l) = lang {
-        path.push_str(&format!("&lang={}", l));
+        path.push_str(&format!("&lang={}", encode_url_component(l)));
     }
 
     let req = ctx.get(&path);
@@ -130,7 +130,15 @@ async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>)
             .get("error")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown error");
-        bail!("{}: {}", code, message);
+        let error = json!({
+            "ok": false,
+            "error": {
+                "code": code,
+                "message": message,
+            }
+        });
+        output::print_value(&ctx.output_format, &error, &[]);
+        return Err(crate::client::PrintedError.into());
     }
 
     if ctx.verbose {

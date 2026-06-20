@@ -14,7 +14,7 @@ if (!existsSync(bin)) {
 }
 
 try {
-  execFileSync(bin, process.argv.slice(2), { stdio: "inherit" });
+  execFileSync(bin, process.argv.slice(2), { stdio: "inherit", argv0: "flowleap" });
 } catch (err) {
   process.exit(err.status ?? 1);
 }

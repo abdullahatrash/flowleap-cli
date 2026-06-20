@@ -73,23 +73,33 @@ pub fn print_value(format: &str, value: &Value, columns: &[(&str, &str)]) {
 }
 
 fn print_object_human(obj: &Value, columns: &[(&str, &str)]) {
+    let mut printed = false;
+
     for (key, label) in columns {
         if let Some(val) = obj.get(key) {
             match val {
-                Value::String(s) => println!("  {}: {}", label, s),
+                Value::String(s) => {
+                    println!("  {}: {}", label, s);
+                    printed = true;
+                }
                 Value::Array(arr) => {
-                    let items: Vec<&str> = arr
-                        .iter()
-                        .filter_map(|v| v.as_str())
-                        .collect();
+                    let items: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
                     if !items.is_empty() {
                         println!("  {}: {}", label, items.join(", "));
+                        printed = true;
                     }
                 }
                 Value::Null => {}
-                other => println!("  {}: {}", label, other),
+                other => {
+                    println!("  {}: {}", label, other);
+                    printed = true;
+                }
             }
         }
+    }
+
+    if !printed {
+        print_json(obj);
     }
 }
 

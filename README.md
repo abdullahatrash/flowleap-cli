@@ -24,6 +24,12 @@ cargo install --git https://github.com/abdullahatrash/flowleap-cli.git
 ## Quick Start
 
 ```bash
+# Verify CLI setup and backend reachability
+flowleap --json doctor
+
+# Use the local backend during development
+flowleap --json doctor --base-url http://localhost:8000
+
 # Authenticate (opens browser for OAuth)
 flowleap auth login
 
@@ -40,8 +46,21 @@ flowleap patent build-query "patents about lithium battery recycling filed by Te
 flowleap ops biblio EP1234567
 flowleap ops claims EP1234567
 
+# USPTO Open Data Portal
+flowleap uspto search --query "inventionTitle:wireless charging"
+flowleap uspto grant 11800000
+
 # Search academic literature
 flowleap academic search "machine learning patent classification"
+
+# Search NPL, legal, and citation data
+flowleap --json npl "battery thermal management" --limit 10
+flowleap --json legal search "doctrine of equivalents" --limit 10
+flowleap --json citation search 16000001 --size 20
+
+# Raw API escape hatch
+flowleap --json api request get /v1/health
+flowleap --json api request post /v1/patent-search --body-file request.json --dry-run
 ```
 
 ## Authentication
@@ -66,11 +85,18 @@ flowleap auth logout
 
 | Command | Description |
 |---------|-------------|
+| `doctor` | Check config, auth, and backend reachability |
+| `health` | Public backend health probes |
+| `api request` | Raw authenticated API escape hatch |
 | `auth login/logout/status` | Manage authentication |
 | `patent search` | Search patents (EPO/USPTO) |
 | `patent build-query` | Natural language → CQL query |
+| `uspto` | USPTO ODP search, grants, applications, continuity, query builder |
 | `ops` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |
 | `academic search` | Search academic literature |
+| `npl` | Search non-patent literature |
+| `legal` | Search patent-law documents |
+| `citation` | Search USPTO citation/prior-art data |
 | `config` | Manage CLI configuration |
 
 ## Configuration
@@ -103,6 +129,7 @@ CLI flags > environment variables > config file
 ## Global Flags
 
 ```
+--json              Emit stable machine-readable JSON
 --output <format>   Output format: json, table, human (default: human)
 --base-url <url>    Override API base URL
 --api-key <key>     Override stored API key
@@ -149,8 +176,23 @@ skills/
 Always use `--output json` when integrating with AI agents for reliable parsing:
 
 ```bash
-flowleap patent search --query "solar panel" --output json
-flowleap ops claims EP1234567 --output json
+flowleap --json doctor
+flowleap --json patent search --query "solar panel"
+flowleap --json ops claims EP1234567
+```
+
+For local backend development:
+
+```bash
+flowleap --json doctor --base-url http://localhost:8000
+flowleap --json health cache --base-url http://localhost:8000
+```
+
+Use `api request` only when a high-level command is missing:
+
+```bash
+flowleap --json api request get /v1/health
+flowleap --json api request post /v1/patent-search --body '{"query":"solar","limit":1}' --dry-run
 ```
 
 ### AI Configuration Files

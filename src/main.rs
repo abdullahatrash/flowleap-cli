@@ -1,7 +1,10 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-use flowleap_cli::commands::{academic, auth, config_cmd, ops, patent};
+use clap::{error::ErrorKind, Parser, Subcommand};
+use flowleap_cli::commands::{
+    academic, api, auth, citation, config_cmd, doctor, health, legal, npl, ops, patent, uspto,
+};
 use flowleap_cli::{client, config};
+use serde_json::json;
 
 /// One CLI for FlowLeap Patent AI — built for humans and AI agents.
 #[derive(Parser)]
@@ -20,9 +23,13 @@ struct Cli {
     #[arg(long, env = "FLOWLEAP_TOKEN", global = true)]
     token: Option<String>,
 
+    /// Emit stable JSON output
+    #[arg(long, global = true)]
+    json: bool,
+
     /// Output format
-    #[arg(long, default_value = "human", value_parser = ["json", "table", "human"], global = true)]
-    output: String,
+    #[arg(long, value_parser = ["json", "table", "human"], global = true)]
+    output: Option<String>,
 
     /// Show request details without executing
     #[arg(long, global = true)]
@@ -38,22 +45,109 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Check CLI config, auth, and backend reachability
+    Doctor,
+    /// Store initial CLI configuration
+    Init {
+        /// API base URL to store
+        #[arg(long, default_value = "https://api.flowleap.co")]
+        base_url: String,
+    },
     /// Authenticate with FlowLeap API
     Auth(auth::AuthArgs),
+    /// Raw and user API helpers
+    Api(api::ApiArgs),
+    /// Public backend health probes
+    Health(health::HealthArgs),
     /// Search and analyze patents
     Patent(patent::PatentArgs),
     /// Direct EPO OPS API commands
     Ops(ops::OpsArgs),
+    /// USPTO Open Data Portal commands
+    Uspto(uspto::UsptoArgs),
     /// Search academic literature
     Academic(academic::AcademicArgs),
+    /// Search non-patent literature
+    Npl(npl::NplArgs),
+    /// Search patent-law documents
+    Legal(legal::LegalArgs),
+    /// Search USPTO citation/prior-art data
+    Citation(citation::CitationArgs),
     /// Manage CLI configuration
     Config(config_cmd::ConfigArgs),
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    let cli = Cli::parse();
+async fn main() {
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => {
+            if args_want_json()
+                && !matches!(
+                    err.kind(),
+                    ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+                )
+            {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "ok": false,
+                        "error": {
+                            "message": err.to_string(),
+                            "kind": format!("{:?}", err.kind()),
+                        }
+                    }))
+                    .unwrap_or_default()
+                );
+                std::process::exit(err.exit_code());
+            }
+            err.exit();
+        }
+    };
+    let wants_json = cli.json || cli.output.as_deref() == Some("json");
 
+    if let Err(err) = run(cli).await {
+        if err
+            .downcast_ref::<flowleap_cli::client::PrintedError>()
+            .is_some()
+        {
+            std::process::exit(1);
+        }
+        if wants_json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "ok": false,
+                    "error": {
+                        "message": err.to_string(),
+                    }
+                }))
+                .unwrap_or_default()
+            );
+        } else {
+            eprintln!("Error: {err}");
+        }
+        std::process::exit(1);
+    }
+}
+
+fn args_want_json() -> bool {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--json" {
+            return true;
+        }
+        if arg == "--output=json" {
+            return true;
+        }
+        if arg == "--output" && args.next().as_deref() == Some("json") {
+            return true;
+        }
+    }
+    false
+}
+
+async fn run(cli: Cli) -> Result<()> {
     // Load config and credentials
     let mut cfg = config::Config::load()?;
     let mut creds = config::Credentials::load()?;
@@ -69,20 +163,63 @@ async fn main() -> Result<()> {
         creds.token = Some(tok.clone());
     }
 
+    let output_format = if cli.json {
+        "json".to_string()
+    } else {
+        cli.output
+            .clone()
+            .or_else(|| cfg.output_format.clone())
+            .unwrap_or_else(|| "human".to_string())
+    };
+
     let ctx = client::Context {
         config: cfg,
         credentials: creds,
-        output_format: cli.output.clone(),
+        output_format,
         dry_run: cli.dry_run,
         verbose: cli.verbose,
         http: reqwest::Client::new(),
     };
 
     match cli.command {
+        Commands::Doctor => doctor::run(&ctx).await,
+        Commands::Init { base_url } => init(&ctx, &base_url).await,
         Commands::Auth(args) => auth::run(&ctx, args).await,
+        Commands::Api(args) => api::run(&ctx, args).await,
+        Commands::Health(args) => health::run(&ctx, args).await,
         Commands::Patent(args) => patent::run(&ctx, args).await,
         Commands::Ops(args) => ops::run(&ctx, args).await,
+        Commands::Uspto(args) => uspto::run(&ctx, args).await,
         Commands::Academic(args) => academic::run(&ctx, args).await,
+        Commands::Npl(args) => npl::run(&ctx, args).await,
+        Commands::Legal(args) => legal::run(&ctx, args).await,
+        Commands::Citation(args) => citation::run(&ctx, args).await,
         Commands::Config(args) => config_cmd::run(&ctx, args).await,
     }
+}
+
+async fn init(ctx: &client::Context, base_url: &str) -> Result<()> {
+    let parsed =
+        reqwest::Url::parse(base_url).map_err(|e| anyhow::anyhow!("Invalid URL: {}", e))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        anyhow::bail!("base-url must use http or https");
+    }
+    if parsed.host_str().is_none() {
+        anyhow::bail!("base-url must include a host");
+    }
+
+    let mut cfg = config::Config::load()?;
+    cfg.base_url = base_url.to_string();
+    cfg.save()?;
+    let value = json!({
+        "ok": true,
+        "baseUrl": base_url,
+        "configPath": config::Config::config_path()?,
+    });
+    if ctx.output_format == "json" {
+        println!("{}", serde_json::to_string_pretty(&value)?);
+    } else {
+        println!("Configured FlowLeap base URL: {}", base_url);
+    }
+    Ok(())
 }
