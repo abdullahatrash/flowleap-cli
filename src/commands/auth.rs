@@ -38,6 +38,22 @@ enum AuthCommand {
     Logout,
     /// Show current authentication status
     Status,
+    /// Create a personal API token (fl_pat_…) for headless/agent use
+    CreateToken {
+        /// Display name for the token (e.g. "ci-agent")
+        #[arg(long)]
+        name: String,
+        /// Store the new token as this CLI's credential
+        #[arg(long)]
+        store: bool,
+    },
+    /// List personal API tokens
+    Tokens,
+    /// Revoke a personal API token by id
+    RevokeToken {
+        /// Token id (from 'flowleap auth tokens')
+        id: String,
+    },
 }
 
 pub async fn run(ctx: &Context, args: AuthArgs) -> Result<()> {
@@ -45,7 +61,77 @@ pub async fn run(ctx: &Context, args: AuthArgs) -> Result<()> {
         AuthCommand::Login { api_key, token } => login(ctx, api_key, token).await,
         AuthCommand::Logout => logout().await,
         AuthCommand::Status => status(ctx).await,
+        AuthCommand::CreateToken { name, store } => create_token(ctx, &name, store).await,
+        AuthCommand::Tokens => list_tokens(ctx).await,
+        AuthCommand::RevokeToken { id } => revoke_token(ctx, &id).await,
     }
+}
+
+async fn create_token(ctx: &Context, name: &str, store: bool) -> Result<()> {
+    ctx.require_auth()?;
+
+    let body = serde_json::json!({ "name": name });
+    let result = ctx
+        .execute_json_body_or_error(ctx.post("/api/tokens", &body))
+        .await?;
+
+    if store {
+        if let Some(token) = result.get("token").and_then(|t| t.as_str()) {
+            let mut creds = Credentials::load()?;
+            creds.api_key = Some(token.to_string());
+            creds.save()?;
+        }
+    }
+
+    if ctx.output_format == "json" || result.get("dryRun").is_some() {
+        crate::output::print_json(&result);
+    } else if let Some(token) = result.get("token").and_then(|t| t.as_str()) {
+        println!("{} Token created. Shown once — store it now:", "✓".green());
+        println!("\n  {}\n", token.bold());
+        if store {
+            println!("Stored as this CLI's credential.");
+        } else {
+            println!("Use: export FLOWLEAP_API_KEY={}", token);
+        }
+    } else {
+        crate::output::print_json(&result);
+    }
+    Ok(())
+}
+
+async fn list_tokens(ctx: &Context) -> Result<()> {
+    ctx.require_auth()?;
+    let result = ctx
+        .execute_json_body_or_error(ctx.get("/api/tokens"))
+        .await?;
+    let columns = &[
+        ("id", "ID"),
+        ("name", "Name"),
+        ("tokenPrefix", "Prefix"),
+        ("createdAt", "Created"),
+        ("lastUsedAt", "Last used"),
+        ("revokedAt", "Revoked"),
+    ];
+    if let Some(tokens) = result.get("tokens") {
+        crate::output::print_value(&ctx.output_format, tokens, columns);
+    } else {
+        crate::output::print_value(&ctx.output_format, &result, columns);
+    }
+    Ok(())
+}
+
+async fn revoke_token(ctx: &Context, id: &str) -> Result<()> {
+    ctx.require_auth()?;
+    let path = format!("/api/tokens/{}", crate::client::encode_url_component(id));
+    let result = ctx
+        .execute_json_body_or_error(ctx.request(reqwest::Method::DELETE, &path, None))
+        .await?;
+    if ctx.output_format == "json" || result.get("dryRun").is_some() {
+        crate::output::print_json(&result);
+    } else {
+        println!("{} Token revoked.", "✓".green());
+    }
+    Ok(())
 }
 
 async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) -> Result<()> {
