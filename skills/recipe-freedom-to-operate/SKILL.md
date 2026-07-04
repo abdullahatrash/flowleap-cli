@@ -28,8 +28,8 @@ flowleap patent build-query "<feature 3 description>"
 
 ```bash
 # Search both databases for each feature
-flowleap patent search --query "<CQL for feature 1>" --source epo --limit 20 --output json
-flowleap patent search --query "<CQL for feature 1>" --source uspto --limit 20 --output json
+flowleap patent search --query "<CQL for feature 1>" --limit 20 --output json
+flowleap uspto search --query "<CQL for feature 1>" --limit 20 --output json   # USPTO uses ODP Lucene syntax, not CQL
 # Repeat for other features
 ```
 

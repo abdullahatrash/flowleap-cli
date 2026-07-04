@@ -172,6 +172,19 @@ async fn run(cli: Cli) -> Result<()> {
         creds.token = Some(tok.clone());
     }
 
+    // fl_org_ keys were a v0.1.x concept with no working backend path; they now
+    // travel as Bearer and always 401. Warn instead of failing mysteriously.
+    if creds
+        .api_key
+        .as_deref()
+        .is_some_and(|k| k.starts_with("fl_org_"))
+    {
+        eprintln!(
+            "warning: fl_org_ organization keys are not supported (the backend never accepted them). \
+             Mint a personal token instead: flowleap auth login && flowleap auth create-token --name <name> --store"
+        );
+    }
+
     // Provider-key env overrides (headless/agent path; humans use `flowleap setup`).
     if let Ok(value) = std::env::var("FLOWLEAP_EPO_KEY") {
         creds.epo_key = Some(value);

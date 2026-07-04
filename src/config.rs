@@ -91,13 +91,27 @@ impl Credentials {
     pub fn save(&self) -> Result<()> {
         let path = Self::credentials_path()?;
         let contents = toml::to_string_pretty(self)?;
-        fs::write(&path, contents)?;
-        // Credentials are secrets: owner read/write only.
+        // Credentials are secrets: create the file 0600 from the start —
+        // write-then-chmod would leave a world-readable window on first save.
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&path)?;
+            file.write_all(contents.as_bytes())?;
+            // Pre-existing files keep their old mode; tighten those too.
+            fs::set_permissions(&path, {
+                use std::os::unix::fs::PermissionsExt;
+                fs::Permissions::from_mode(0o600)
+            })?;
         }
+        #[cfg(not(unix))]
+        fs::write(&path, contents)?;
         Ok(())
     }
 

@@ -94,6 +94,33 @@ fn with_candidate_keys(ctx: &Context, creds: Credentials) -> Context {
     }
 }
 
+/// Credentials for a single-provider validation probe. Starts from the
+/// RUNTIME credentials (so --token/--api-key/env auth is kept — the backend's
+/// /v1/keys/validate requires auth), swaps in the candidate keys, and strips
+/// the OTHER provider's keys so e.g. a stale stored EPO pair can't 400 the
+/// probe before the USPTO key under test is ever checked.
+fn probe_credentials(
+    ctx: &Context,
+    provider: &Provider,
+    key: &str,
+    secret: Option<&str>,
+) -> Credentials {
+    let mut creds = ctx.credentials.clone();
+    match provider {
+        Provider::Epo => {
+            creds.epo_key = Some(key.to_string());
+            creds.epo_secret = secret.map(str::to_string);
+            creds.uspto_key = None;
+        }
+        Provider::Uspto => {
+            creds.uspto_key = Some(key.to_string());
+            creds.epo_key = None;
+            creds.epo_secret = None;
+        }
+    }
+    creds
+}
+
 /// POST /v1/keys/validate with the given credentials. Returns the per-provider
 /// verdicts object, mapping the middleware's eager EPO rejection (400
 /// patent_provider_key_invalid) into an epo-invalid verdict.
@@ -146,63 +173,113 @@ async fn set(
     secret: Option<String>,
     no_verify: bool,
 ) -> Result<()> {
-    let mut creds = Credentials::load()?;
+    let provider_name = match provider {
+        Provider::Epo => "epo",
+        Provider::Uspto => "uspto",
+    };
 
-    match provider {
-        Provider::Epo => {
-            let (key, secret) = match (key, secret) {
-                (Some(k), Some(s)) => (k, s),
-                (None, None) => {
-                    require_tty()?;
-                    prompt_epo_pair()?
-                }
-                _ => bail!("EPO needs both --key and --secret (they only work as a pair)."),
-            };
-            creds.epo_key = Some(key);
-            creds.epo_secret = Some(secret);
-        }
+    if ctx.dry_run {
+        output::print_json(&json!({
+            "dryRun": true,
+            "action": "keys set",
+            "provider": provider_name,
+            "wouldValidate": !no_verify,
+            "wouldSaveTo": Credentials::credentials_path()?,
+        }));
+        return Ok(());
+    }
+
+    // Resolve the candidate keys (flags, or prompts when interactive).
+    let (candidate_key, candidate_secret): (String, Option<String>) = match provider {
+        Provider::Epo => match (key, secret) {
+            (Some(k), Some(s)) => (k, Some(s)),
+            (None, None) => {
+                require_tty()?;
+                let (k, s) = prompt_epo_pair()?;
+                (k, Some(s))
+            }
+            _ => bail!("EPO needs both --key and --secret (they only work as a pair)."),
+        },
         Provider::Uspto => {
-            let key = match key {
-                Some(k) => k,
-                None => {
-                    require_tty()?;
-                    prompt_uspto_key()?
-                }
-            };
             if secret.is_some() {
                 bail!("USPTO takes only --key (no secret).");
             }
-            creds.uspto_key = Some(key);
+            match key {
+                Some(k) => (k, None),
+                None => {
+                    require_tty()?;
+                    (prompt_uspto_key()?, None)
+                }
+            }
         }
-    }
+    };
 
+    // verified: Some(true) proven, Some(false) rejected, None unverifiable.
+    let mut verified: Option<bool> = if no_verify { None } else { Some(false) };
+    let mut verdict = Value::Null;
     if !no_verify {
-        let verdicts = validate(ctx, creds.clone()).await?;
-        let (name, verdict) = match provider {
-            Provider::Epo => ("epo", &verdicts["epo"]),
-            Provider::Uspto => ("uspto", &verdicts["uspto"]),
+        // Probe with runtime auth + the candidate keys in isolation.
+        let probe = probe_credentials(ctx, &provider, &candidate_key, candidate_secret.as_deref());
+        let verdicts = validate(ctx, probe).await?;
+        verdict = verdicts[provider_name].clone();
+        verified = match verdict["valid"] {
+            Value::Bool(true) => Some(true),
+            Value::Bool(false) => Some(false),
+            _ => None, // provider unreachable — could not verify either way
         };
-        if verdict["valid"] == Value::Bool(false) {
+        if verified == Some(false) {
             if ctx.output_format == "json" {
-                output::print_json(&json!({ "ok": false, "provider": name, "verdict": verdict }));
+                output::print_json(
+                    &json!({ "ok": false, "provider": provider_name, "verdict": verdict }),
+                );
             } else {
-                eprintln!("{}", verdict_line(name, verdict));
+                eprintln!("{}", verdict_line(provider_name, &verdict));
                 eprintln!("Keys NOT saved. Fix them and retry, or use --no-verify to save anyway.");
             }
             return Err(crate::client::PrintedError.into());
         }
     }
 
+    // Persist to the on-disk credentials only (runtime --token/env auth is
+    // never written to disk by this command).
+    let mut creds = Credentials::load()?;
+    match provider {
+        Provider::Epo => {
+            creds.epo_key = Some(candidate_key);
+            creds.epo_secret = candidate_secret;
+        }
+        Provider::Uspto => {
+            creds.uspto_key = Some(candidate_key);
+        }
+    }
     creds.save()?;
+
     if ctx.output_format == "json" {
-        output::print_json(&json!({ "ok": true, "saved": true, "verified": !no_verify }));
+        output::print_json(&json!({
+            "ok": true,
+            "saved": true,
+            "verified": verified == Some(true),
+            "verdict": verdict,
+        }));
     } else {
-        println!(
-            "{} Keys saved to {:?} (0600){}",
-            "✓".green(),
-            Credentials::credentials_path()?,
-            if no_verify { " — not verified" } else { "" }
-        );
+        match verified {
+            Some(true) => println!(
+                "{} Keys verified and saved to {:?} (0600)",
+                "✓".green(),
+                Credentials::credentials_path()?
+            ),
+            _ => println!(
+                "{} Keys saved to {:?} (0600) — {} verify later with {}",
+                "!".yellow(),
+                Credentials::credentials_path()?,
+                if no_verify {
+                    "NOT verified (--no-verify);"
+                } else {
+                    "could NOT be verified (provider unreachable);"
+                },
+                "flowleap keys test".cyan()
+            ),
+        }
     }
     Ok(())
 }
@@ -255,17 +332,41 @@ fn list(ctx: &Context) -> Result<()> {
 
 async fn test(ctx: &Context) -> Result<()> {
     ctx.require_auth()?;
+    if ctx.dry_run {
+        output::print_json(&json!({
+            "dryRun": true,
+            "action": "keys test",
+            "url": ctx.url("/v1/keys/validate"),
+        }));
+        return Ok(());
+    }
     let verdicts = validate(ctx, ctx.credentials.clone()).await?;
+    // Exit nonzero when any provider is invalid/missing so scripts and agents
+    // can gate on `flowleap keys test`.
+    let healthy = verdicts["epo"]["valid"] != Value::Bool(false)
+        && verdicts["uspto"]["valid"] != Value::Bool(false);
     if ctx.output_format == "json" {
-        output::print_json(&json!({ "ok": true, "providers": verdicts }));
+        output::print_json(&json!({ "ok": healthy, "providers": verdicts }));
     } else {
         println!("{}", verdict_line("epo", &verdicts["epo"]));
         println!("{}", verdict_line("uspto", &verdicts["uspto"]));
+    }
+    if !healthy {
+        return Err(crate::client::PrintedError.into());
     }
     Ok(())
 }
 
 fn rm(ctx: &Context, provider: Provider) -> Result<()> {
+    if ctx.dry_run {
+        output::print_json(&json!({
+            "dryRun": true,
+            "action": "keys rm",
+            "provider": match provider { Provider::Epo => "epo", Provider::Uspto => "uspto" },
+            "wouldModify": Credentials::credentials_path()?,
+        }));
+        return Ok(());
+    }
     let mut creds = Credentials::load()?;
     let name = match provider {
         Provider::Epo => {
@@ -414,27 +515,40 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
     {
         loop {
             let (key, secret) = prompt_epo_pair()?;
-            let mut candidate = creds.clone();
-            candidate.epo_key = Some(key);
-            candidate.epo_secret = Some(secret);
             let spinner = indicatif::ProgressBar::new_spinner();
             spinner.set_message("Validating against EPO OPS…");
             spinner.enable_steady_tick(std::time::Duration::from_millis(90));
-            let verdicts = validate(ctx, candidate.clone()).await?;
+            // Probe carries runtime auth and ONLY the candidate EPO pair.
+            let probe = probe_credentials(ctx, &Provider::Epo, &key, Some(&secret));
+            let verdicts = validate(ctx, probe).await?;
             spinner.finish_and_clear();
             println!("  {}", verdict_line("epo", &verdicts["epo"]));
-            if verdicts["epo"]["valid"] == Value::Bool(false) {
-                if Confirm::with_theme(&theme)
-                    .with_prompt("EPO rejected those keys — try again?")
-                    .default(true)
-                    .interact()?
-                {
-                    continue;
+            match verdicts["epo"]["valid"] {
+                Value::Bool(false) => {
+                    if Confirm::with_theme(&theme)
+                        .with_prompt("EPO rejected those keys — try again?")
+                        .default(true)
+                        .interact()?
+                    {
+                        continue;
+                    }
+                    skip_warning("epo", epo_on_server, "patent/ops commands");
+                    break;
                 }
-                skip_warning("epo", epo_on_server, "patent/ops commands");
-                break;
+                Value::Bool(true) => {}
+                _ => {
+                    if !Confirm::with_theme(&theme)
+                        .with_prompt("EPO OPS is unreachable, so the keys could NOT be verified — save anyway?")
+                        .default(true)
+                        .interact()?
+                    {
+                        skip_warning("epo", epo_on_server, "patent/ops commands");
+                        break;
+                    }
+                }
             }
-            creds = candidate;
+            creds.epo_key = Some(key);
+            creds.epo_secret = Some(secret);
             break;
         }
     } else {
@@ -458,26 +572,40 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
     {
         loop {
             let key = prompt_uspto_key()?;
-            let mut candidate = creds.clone();
-            candidate.uspto_key = Some(key);
             let spinner = indicatif::ProgressBar::new_spinner();
             spinner.set_message("Validating against USPTO ODP…");
             spinner.enable_steady_tick(std::time::Duration::from_millis(90));
-            let verdicts = validate(ctx, candidate.clone()).await?;
+            // Probe carries runtime auth and ONLY the candidate USPTO key, so
+            // a stale stored EPO pair can't fail the probe first.
+            let probe = probe_credentials(ctx, &Provider::Uspto, &key, None);
+            let verdicts = validate(ctx, probe).await?;
             spinner.finish_and_clear();
             println!("  {}", verdict_line("uspto", &verdicts["uspto"]));
-            if verdicts["uspto"]["valid"] == Value::Bool(false) {
-                if Confirm::with_theme(&theme)
-                    .with_prompt("USPTO rejected that key — try again?")
-                    .default(true)
-                    .interact()?
-                {
-                    continue;
+            match verdicts["uspto"]["valid"] {
+                Value::Bool(false) => {
+                    if Confirm::with_theme(&theme)
+                        .with_prompt("USPTO rejected that key — try again?")
+                        .default(true)
+                        .interact()?
+                    {
+                        continue;
+                    }
+                    skip_warning("uspto", uspto_on_server, "uspto/citation commands");
+                    break;
                 }
-                skip_warning("uspto", uspto_on_server, "uspto/citation commands");
-                break;
+                Value::Bool(true) => {}
+                _ => {
+                    if !Confirm::with_theme(&theme)
+                        .with_prompt("USPTO ODP is unreachable, so the key could NOT be verified — save anyway?")
+                        .default(true)
+                        .interact()?
+                    {
+                        skip_warning("uspto", uspto_on_server, "uspto/citation commands");
+                        break;
+                    }
+                }
             }
-            creds = candidate;
+            creds.uspto_key = Some(key);
             break;
         }
     } else {

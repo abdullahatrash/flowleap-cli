@@ -26,8 +26,8 @@ flowleap patent build-query "<technology description>"
 
 ```bash
 # Search both databases
-flowleap patent search --query "<CQL>" --source epo --limit 50 --output json
-flowleap patent search --query "<CQL>" --source uspto --limit 50 --output json
+flowleap patent search --query "<CQL>" --limit 50 --output json
+flowleap uspto search --query "<CQL>" --limit 50 --output json   # USPTO uses ODP Lucene syntax, not CQL
 ```
 
 ### Step 3: Identify Key Players

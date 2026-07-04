@@ -79,6 +79,12 @@ async fn create_token(ctx: &Context, name: &str, store: bool) -> Result<()> {
         if let Some(token) = result.get("token").and_then(|t| t.as_str()) {
             let mut creds = Credentials::load()?;
             creds.api_key = Some(token.to_string());
+            // Clear the session token: auth prefers `token` over `api_key`, so
+            // leaving the (short-lived) Clerk JWT in place would shadow the
+            // durable personal token we just stored — commands would silently
+            // keep using the JWT until it expires, then 401.
+            creds.token = None;
+            creds.refresh_token = None;
             creds.save()?;
         }
     }
@@ -89,7 +95,7 @@ async fn create_token(ctx: &Context, name: &str, store: bool) -> Result<()> {
         println!("{} Token created. Shown once — store it now:", "✓".green());
         println!("\n  {}\n", token.bold());
         if store {
-            println!("Stored as this CLI's credential.");
+            println!("Stored as this CLI's credential (previous session token cleared).");
         } else {
             println!("Use: export FLOWLEAP_API_KEY={}", token);
         }

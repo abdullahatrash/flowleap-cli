@@ -32,8 +32,8 @@ flowleap patent search --query "solid state battery electrolyte" --limit 20
 flowleap patent build-query "machine learning methods for drug discovery"
 
 # Search across databases
-flowleap patent search --query "ti=machine AND ti=learning AND ti=drug" --source epo --limit 30
-flowleap patent search --query "ti=machine AND ti=learning AND ti=drug" --source uspto --limit 30
+flowleap patent search --query "ti=machine AND ti=learning AND ti=drug" --limit 30
+flowleap uspto search --query "ti=machine AND ti=learning AND ti=drug" --limit 30   # USPTO uses ODP Lucene syntax, not CQL
 ```
 
 ### 3. Deep Dive

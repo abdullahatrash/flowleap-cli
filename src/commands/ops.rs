@@ -116,24 +116,31 @@ async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>)
     }
 
     let req = ctx.get(&path);
-    let envelope = ctx.execute_json_allow_error(req).await?;
+    let envelope = ctx.execute_json_envelope(req).await?;
+    if envelope.get("dryRun").and_then(|v| v.as_bool()) == Some(true) {
+        output::print_json(&envelope);
+        return Ok(());
+    }
 
-    // Ops endpoints wrap payloads in a success/data envelope:
-    //   { "success": true,  "data": {...}, "cached": bool, "executionTimeMs": n }
-    //   { "success": false, "error": "...", "code": "NOT_FOUND", "status": 404 }
-    if envelope.get("success") == Some(&Value::Bool(false)) {
-        let code = envelope
+    let http_ok = envelope.get("ok").and_then(|v| v.as_bool()) == Some(true);
+    let body = envelope.get("body").cloned().unwrap_or(Value::Null);
+
+    // Two error shapes reach this command:
+    //   ops routes:  4xx/5xx + { "success": false, "error": "...", "code": "NOT_FOUND", ... }
+    //   middleware:  4xx     + { "error": { "message", "type", "code" } }  (no "success" field!)
+    // HTTP status is authoritative — a body without success:false must not
+    // fall through to the data path.
+    if !http_ok || body.get("success") == Some(&Value::Bool(false)) {
+        let code = body
             .get("code")
             .and_then(|v| v.as_str())
+            .or_else(|| body.pointer("/error/code").and_then(|v| v.as_str()))
             .unwrap_or("ERROR");
-        let message = envelope
+        let message = body
             .get("error")
             .and_then(|v| v.as_str())
+            .or_else(|| body.pointer("/error/message").and_then(|v| v.as_str()))
             .unwrap_or("unknown error");
-        let status = envelope
-            .get("status")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(500) as u16;
         let mut error = json!({
             "ok": false,
             "error": {
@@ -141,7 +148,8 @@ async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>)
                 "message": message,
             }
         });
-        let hint = crate::client::provider_keys_hint(status, &envelope);
+        // execute_json_envelope already enriched key-related failures.
+        let hint = envelope.get("providerKeysHint").cloned();
         if let Some(ref hint) = hint {
             error["providerKeysHint"] = hint.clone();
         }
@@ -155,15 +163,15 @@ async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>)
     }
 
     if ctx.verbose {
-        if let Some(cached) = envelope.get("cached").and_then(|v| v.as_bool()) {
+        if let Some(cached) = body.get("cached").and_then(|v| v.as_bool()) {
             eprintln!("  cached: {}", cached);
         }
-        if let Some(ms) = envelope.get("executionTimeMs").and_then(|v| v.as_u64()) {
+        if let Some(ms) = body.get("executionTimeMs").and_then(|v| v.as_u64()) {
             eprintln!("  executionTimeMs: {}", ms);
         }
     }
 
-    let data = envelope.get("data").unwrap_or(&envelope);
+    let data = body.get("data").unwrap_or(&body);
     output::print_json(data);
 
     Ok(())
