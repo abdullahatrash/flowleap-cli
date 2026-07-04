@@ -164,6 +164,51 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
     }
 
     // OAuth 2.0 Device Authorization flow
+    let access_token = device_flow_login(ctx).await?;
+    let mut creds = Credentials::load()?;
+    creds.token = Some(access_token);
+    creds.save()?;
+    println!("{} Successfully authenticated!", "✓".green());
+    println!(
+        "Credentials saved to {:?}",
+        Credentials::credentials_path()?
+    );
+    Ok(())
+}
+
+/// Best-effort copy to the system clipboard (pbcopy/xclip/wl-copy). Never fails.
+fn copy_to_clipboard(text: &str) -> bool {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    for cmd in [
+        &["pbcopy"][..],
+        &["xclip", "-selection", "clipboard"][..],
+        &["wl-copy"][..],
+    ] {
+        if let Ok(mut child) = Command::new(cmd[0])
+            .args(&cmd[1..])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            if let Some(stdin) = child.stdin.as_mut() {
+                if stdin.write_all(text.as_bytes()).is_ok() {
+                    let _ = child.wait();
+                    return true;
+                }
+            }
+            let _ = child.kill();
+        }
+    }
+    false
+}
+
+/// Run the OAuth 2.0 Device Authorization flow and return the access token.
+/// Prints the code/URL (copying the URL to the clipboard when possible), opens
+/// the browser, polls with slow_down handling, and shows a manual-fallback
+/// hint if approval takes a while. Does NOT persist anything.
+pub async fn device_flow_login(ctx: &Context) -> Result<String> {
     println!("Starting device authorization flow...");
 
     let base_url = ctx.config.base_url.trim_end_matches('/');
@@ -183,12 +228,18 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
 
     let response: DeviceAuthResponse = resp.json().await?;
 
+    let copied = copy_to_clipboard(&response.verification_uri_complete);
     println!(
-        "\n  {} {}\n  {} {}\n",
+        "\n  {} {}\n  {} {}{}\n",
         "▸ Visit:".bold(),
         response.verification_uri.cyan(),
         "▸ Enter code:".bold(),
         response.user_code.bold().yellow(),
+        if copied {
+            "   (sign-in link copied to clipboard)".dimmed().to_string()
+        } else {
+            String::new()
+        },
     );
 
     let _ = open::that(&response.verification_uri_complete);
@@ -203,7 +254,9 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
     spinner.enable_steady_tick(Duration::from_millis(100));
 
     let mut interval = response.interval;
-    let deadline = std::time::Instant::now() + Duration::from_secs(response.expires_in);
+    let started = std::time::Instant::now();
+    let deadline = started + Duration::from_secs(response.expires_in);
+    let mut hinted = false;
 
     loop {
         tokio::time::sleep(Duration::from_secs(interval)).await;
@@ -211,6 +264,18 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
         if std::time::Instant::now() > deadline {
             spinner.finish_and_clear();
             bail!("Device authorization expired. Please try again.");
+        }
+
+        // Browser didn't open, or the tab got lost? Give the manual path once.
+        if !hinted && started.elapsed() > Duration::from_secs(25) {
+            hinted = true;
+            spinner.suspend(|| {
+                println!(
+                    "  Taking a while? Open {} manually and enter code {}",
+                    response.verification_uri_complete.cyan(),
+                    response.user_code.bold().yellow()
+                );
+            });
         }
 
         let poll_resp = client
@@ -227,16 +292,7 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
 
         if let Some(access_token) = body.get("access_token").and_then(|v| v.as_str()) {
             spinner.finish_and_clear();
-            // Store token
-            let mut creds = Credentials::load()?;
-            creds.token = Some(access_token.to_string());
-            creds.save()?;
-            println!("{} Successfully authenticated!", "✓".green());
-            println!(
-                "Credentials saved to {:?}",
-                Credentials::credentials_path()?
-            );
-            return Ok(());
+            return Ok(access_token.to_string());
         }
 
         if let Some(error) = body.get("error").and_then(|v| v.as_str()) {
@@ -265,6 +321,26 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
             }
         }
     }
+}
+
+/// Mint a personal API token via /api/tokens using `auth_ctx` (must carry a
+/// Clerk credential) and store it as this machine's durable credential,
+/// clearing the session token. Returns the masked prefix for display.
+pub async fn mint_and_store_token(auth_ctx: &Context, name: &str) -> Result<String> {
+    let body = serde_json::json!({ "name": name });
+    let result = auth_ctx
+        .execute_json_body_or_error(auth_ctx.post("/api/tokens", &body))
+        .await?;
+    let Some(token) = result.get("token").and_then(|t| t.as_str()) else {
+        bail!("Token endpoint did not return a token.");
+    };
+    let mut creds = Credentials::load()?;
+    creds.api_key = Some(token.to_string());
+    creds.token = None;
+    creds.refresh_token = None;
+    creds.save()?;
+    let prefix: String = token.chars().take(11).collect();
+    Ok(format!("{}…", prefix))
 }
 
 async fn logout() -> Result<()> {

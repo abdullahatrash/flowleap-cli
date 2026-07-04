@@ -476,16 +476,81 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
         }
     }
 
-    // 2. Auth
+    // 2. Auth — run it inline rather than bailing out of the wizard.
+    // Work on a local Context so post-auth steps carry the new credential.
+    let mut ctx = with_candidate_keys(ctx, ctx.credentials.clone());
     if ctx.credentials.auth_header().is_none() {
-        println!(
-            "{} Not authenticated. Run {} first (or set FLOWLEAP_API_KEY), then re-run setup.",
-            "✗".red(),
-            "flowleap auth login".cyan()
-        );
-        bail!("Not authenticated.");
+        let choice = dialoguer::Select::with_theme(&theme)
+            .with_prompt("Not signed in yet — how do you want to authenticate?")
+            .items(&[
+                "Sign in with browser (recommended)",
+                "Paste a personal API token (fl_pat_…)",
+                "Skip for now",
+            ])
+            .default(0)
+            .interact()?;
+        match choice {
+            0 => {
+                let access_token = crate::commands::auth::device_flow_login(&ctx).await?;
+                ctx.credentials.token = Some(access_token.clone());
+                let mut creds = Credentials::load()?;
+                creds.token = Some(access_token);
+                creds.save()?;
+                println!("{} Signed in", "✓".green());
+                // Session tokens expire; a personal token makes this machine durable.
+                if Confirm::with_theme(&theme)
+                    .with_prompt("Create a long-lived API token for this machine? (recommended)")
+                    .default(true)
+                    .interact()?
+                {
+                    let prefix =
+                        crate::commands::auth::mint_and_store_token(&ctx, "this-machine").await?;
+                    ctx.credentials = Credentials::load()?;
+                    println!(
+                        "{} Personal token {} stored — sign-ins on this machine won't expire.",
+                        "✓".green(),
+                        prefix
+                    );
+                }
+            }
+            1 => {
+                let token = Password::with_theme(&theme)
+                    .with_prompt("Personal API token (hidden)")
+                    .interact()?;
+                let token = token.trim().to_string();
+                if token.is_empty() {
+                    bail!("Token cannot be empty.");
+                }
+                ctx.credentials.api_key = Some(token.clone());
+                ctx.credentials.token = None;
+                // Prove it works before saving.
+                let probe = ctx.execute_json_envelope(ctx.get("/api/profile")).await?;
+                if probe["ok"].as_bool() != Some(true) {
+                    bail!(
+                        "The backend rejected that token (HTTP {}). Check it and re-run setup.",
+                        probe["status"]
+                    );
+                }
+                let mut creds = Credentials::load()?;
+                creds.api_key = Some(token);
+                creds.token = None;
+                creds.save()?;
+                println!("{} Token verified and stored", "✓".green());
+            }
+            _ => {
+                println!(
+                    "  {} Skipped sign-in — authenticated commands will fail until you run {}",
+                    "!".yellow(),
+                    "flowleap auth login".cyan()
+                );
+                println!("  Provider keys can't be validated without auth, so setup stops here.");
+                return Ok(());
+            }
+        }
+    } else {
+        println!("{} Authenticated", "✓".green());
     }
-    println!("{} Authenticated", "✓".green());
+    let ctx = &ctx;
 
     // What does the server already have? Drives the skip warnings.
     let baseline = validate(ctx, ctx.credentials.clone())
