@@ -26,9 +26,11 @@ fn dry_run_succeeds_without_credentials() {
             "patent",
             "search",
             "--query",
-            "wireless charging",
-            "--source",
-            "uspto",
+            "ti=\"wireless charging\"",
+            "--limit",
+            "5",
+            "--countries",
+            "EP,WO",
             "--dry-run",
             "--output",
             "json",
@@ -44,8 +46,12 @@ fn dry_run_succeeds_without_credentials() {
     assert_eq!(value["dryRun"], true);
     assert_eq!(value["method"], "POST");
     assert_eq!(value["authenticated"], false);
-    assert_eq!(value["body"]["query"], "wireless charging");
-    assert_eq!(value["body"]["source"], "uspto");
+    // The backend contract is { query (CQL), range: "start-end", countries? }.
+    assert_eq!(value["body"]["query"], "ti=\"wireless charging\"");
+    assert_eq!(value["body"]["range"], "1-5");
+    assert_eq!(value["body"]["countries"], "EP,WO");
+    assert!(value["body"].get("source").is_none());
+    assert!(value["body"].get("limit").is_none());
 }
 
 #[test]

@@ -43,9 +43,9 @@ enum UsptoCommand {
         /// Natural language description
         description: String,
 
-        /// Model to use for query building
-        #[arg(long)]
-        model: Option<String>,
+        /// Query strategy focus
+        #[arg(long, value_parser = ["broad", "precise", "comprehensive"], default_value = "comprehensive")]
+        focus: String,
     },
 }
 
@@ -57,8 +57,8 @@ pub async fn run(ctx: &Context, args: UsptoArgs) -> Result<()> {
         UsptoCommand::Grant { patent_number } => grant(ctx, &patent_number).await,
         UsptoCommand::Application { app_number } => application(ctx, &app_number).await,
         UsptoCommand::Continuity { app_number } => continuity(ctx, &app_number).await,
-        UsptoCommand::BuildQuery { description, model } => {
-            build_query(ctx, &description, model.as_deref()).await
+        UsptoCommand::BuildQuery { description, focus } => {
+            build_query(ctx, &description, &focus).await
         }
     }
 }
@@ -109,14 +109,11 @@ async fn continuity(ctx: &Context, app_number: &str) -> Result<()> {
     Ok(())
 }
 
-async fn build_query(ctx: &Context, description: &str, model: Option<&str>) -> Result<()> {
-    let mut body = json!({
+async fn build_query(ctx: &Context, description: &str, focus: &str) -> Result<()> {
+    let body = json!({
         "description": description,
+        "focus": focus,
     });
-
-    if let Some(m) = model {
-        body["model"] = json!(m);
-    }
 
     let result = ctx
         .execute_json_body_or_error(ctx.post("/v1/build-uspto-query", &body))
@@ -124,10 +121,17 @@ async fn build_query(ctx: &Context, description: &str, model: Option<&str>) -> R
 
     if ctx.output_format == "json" || result.get("dryRun").is_some() {
         output::print_json(&result);
-    } else if let Some(query) = result.get("query").and_then(|q| q.as_str()) {
-        println!("Generated USPTO query:\n");
-        println!("  {}", query);
-        if let Some(explanation) = result.get("explanation").and_then(|e| e.as_str()) {
+        return Ok(());
+    }
+
+    // Response shape: { success, strategy: { recommended_query, explanation, ... } }.
+    // recommended_query is a full ODP search request body (JSON object), directly
+    // submittable to `flowleap uspto search` / POST /v1/patent-search-uspto/search.
+    let strategy = result.get("strategy").unwrap_or(&result);
+    if let Some(query) = strategy.get("recommended_query") {
+        println!("Generated USPTO search request body:\n");
+        println!("{}", serde_json::to_string_pretty(query)?);
+        if let Some(explanation) = strategy.get("explanation").and_then(|e| e.as_str()) {
             println!("\n{}", explanation);
         }
     } else {
