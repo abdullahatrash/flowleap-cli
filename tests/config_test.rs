@@ -61,6 +61,7 @@ fn test_credentials_toml_roundtrip() {
         api_key: Some("sk-test-key-123".to_string()),
         token: Some("eyJhbGciOiJIUzI1NiJ9.test".to_string()),
         refresh_token: Some("refresh-tok-456".to_string()),
+        ..Default::default()
     };
 
     let serialized = toml::to_string_pretty(&creds).unwrap();
@@ -78,6 +79,7 @@ fn test_credentials_auth_header_precedence() {
         api_key: Some("api-key".to_string()),
         token: Some("my-token".to_string()),
         refresh_token: None,
+        ..Default::default()
     };
     assert_eq!(creds.auth_header(), Some("Bearer my-token".to_string()));
 
@@ -86,6 +88,7 @@ fn test_credentials_auth_header_precedence() {
         api_key: Some("api-key".to_string()),
         token: None,
         refresh_token: None,
+        ..Default::default()
     };
     assert_eq!(creds.auth_header(), Some("Bearer api-key".to_string()));
 
@@ -101,6 +104,7 @@ fn test_credentials_clear() {
         api_key: Some("key".to_string()),
         token: Some("tok".to_string()),
         refresh_token: Some("refresh".to_string()),
+        ..Default::default()
     };
     creds.clear();
     assert!(creds.api_key.is_none());
@@ -143,6 +147,7 @@ fn test_credentials_file_persistence() {
         api_key: None,
         token: Some("test-token".to_string()),
         refresh_token: None,
+        ..Default::default()
     };
 
     let contents = toml::to_string_pretty(&creds).unwrap();
@@ -153,4 +158,44 @@ fn test_credentials_file_persistence() {
     assert_eq!(loaded.api_key, creds.api_key);
     assert_eq!(loaded.token, creds.token);
     assert_eq!(loaded.refresh_token, creds.refresh_token);
+}
+
+/// Provider keys round-trip through TOML and the EPO pair is all-or-nothing
+#[test]
+fn test_provider_keys_roundtrip_and_pairing() {
+    let creds = Credentials {
+        epo_key: Some("consumer-key".to_string()),
+        epo_secret: Some("consumer-secret".to_string()),
+        uspto_key: Some("odp-key".to_string()),
+        ..Default::default()
+    };
+
+    let contents = toml::to_string_pretty(&creds).unwrap();
+    let parsed: Credentials = toml::from_str(&contents).unwrap();
+    assert_eq!(parsed.epo_pair(), Some(("consumer-key", "consumer-secret")));
+    assert_eq!(parsed.uspto_key.as_deref(), Some("odp-key"));
+
+    // Half a pair is not a pair — the backend rejects one-without-the-other.
+    let half = Credentials {
+        epo_key: Some("only-key".to_string()),
+        ..Default::default()
+    };
+    assert_eq!(half.epo_pair(), None);
+
+    // clear() wipes provider keys too.
+    let mut full = creds;
+    full.clear();
+    assert!(full.epo_key.is_none());
+    assert!(full.epo_secret.is_none());
+    assert!(full.uspto_key.is_none());
+}
+
+/// Old credentials files without provider-key fields still parse
+#[test]
+fn test_credentials_backwards_compatible_parse() {
+    let legacy = "api_key = \"fl_pat_abc\"\n";
+    let parsed: Credentials = toml::from_str(legacy).unwrap();
+    assert_eq!(parsed.api_key.as_deref(), Some("fl_pat_abc"));
+    assert_eq!(parsed.epo_pair(), None);
+    assert!(parsed.uspto_key.is_none());
 }

@@ -38,7 +38,47 @@ flowleap auth login --api-key ...
 flowleap --json api profile
 ```
 
-Org API keys beginning with `fl_org_` are sent as `X-API-Key`. Other API keys/tokens use bearer auth.
+All credentials are sent as `Authorization: Bearer …` — either a Clerk JWT
+(from `flowleap auth login` OAuth flow) or a personal API token (`fl_pat_…`).
+Mint long-lived tokens for headless use:
+
+```bash
+flowleap auth create-token --name my-agent --store
+flowleap auth tokens
+flowleap auth revoke-token <id>
+```
+
+## Provider Keys (BYOK)
+
+Patent data may need the user's own EPO OPS / USPTO ODP keys. If a command
+fails with a `providerKeysHint` (code `provider_keys_required` /
+`provider_keys_invalid`): **stop — this needs a human** (browser signup).
+Ask the user to run `flowleap setup`, or apply keys they give you with
+`flowleap keys set …`. Details: the `flowleap-keys` skill.
+
+```bash
+flowleap --json keys test    # live per-provider verdicts
+```
+
+## Agent-First Tool Facade
+
+Prefer `flowleap tools` when you want runtime-discoverable, uniformly-shaped
+operations (see the `flowleap-tools` skill for the full inventory):
+
+```bash
+flowleap --json tools list
+flowleap --json tools run get_patent_summary patent_number=EP1000000
+```
+
+## Install Skills
+
+Ship these skills to any agent's skills directory:
+
+```bash
+flowleap skills install              # → ~/.claude/skills
+flowleap skills install --project    # → .claude/skills
+flowleap skills install --dir <path> # any other agent
+```
 
 ## Safe Read Workflow
 

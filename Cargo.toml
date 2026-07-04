@@ -1,6 +1,6 @@
 [package]
 name = "flowleap-cli"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
 description = "One CLI for FlowLeap Patent AI — built for humans and AI agents"
 authors = ["FlowLeap"]
@@ -32,6 +32,7 @@ dirs = "6"
 colored = "3"
 comfy-table = "7"
 indicatif = "0.17"
+dialoguer = { version = "0.11", features = ["password"] }
 
 # Error handling
 anyhow = "1"
@@ -39,6 +40,9 @@ thiserror = "2"
 
 # URL opening for OAuth
 open = "5"
+
+# Embedded agent skills (skills/ directory baked into the binary)
+include_dir = "0.7"
 
 
 [dev-dependencies]

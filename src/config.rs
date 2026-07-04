@@ -28,6 +28,12 @@ pub struct Credentials {
     pub api_key: Option<String>,
     pub token: Option<String>,
     pub refresh_token: Option<String>,
+    /// BYOK patent-provider credentials, forwarded per-request as headers
+    /// (x-epo-ops-key / x-epo-ops-secret / x-uspto-odp-key). EPO key and
+    /// secret only work as a pair — the backend rejects half a pair.
+    pub epo_key: Option<String>,
+    pub epo_secret: Option<String>,
+    pub uspto_key: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -85,7 +91,13 @@ impl Credentials {
     pub fn save(&self) -> Result<()> {
         let path = Self::credentials_path()?;
         let contents = toml::to_string_pretty(self)?;
-        fs::write(path, contents)?;
+        fs::write(&path, contents)?;
+        // Credentials are secrets: owner read/write only.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+        }
         Ok(())
     }
 
@@ -101,5 +113,16 @@ impl Credentials {
         self.api_key = None;
         self.token = None;
         self.refresh_token = None;
+        self.epo_key = None;
+        self.epo_secret = None;
+        self.uspto_key = None;
+    }
+
+    /// EPO pair, only when complete (the backend rejects half a pair).
+    pub fn epo_pair(&self) -> Option<(&str, &str)> {
+        match (self.epo_key.as_deref(), self.epo_secret.as_deref()) {
+            (Some(key), Some(secret)) => Some((key, secret)),
+            _ => None,
+        }
     }
 }

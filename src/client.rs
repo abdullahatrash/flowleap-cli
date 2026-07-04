@@ -15,6 +15,116 @@ impl std::fmt::Display for PrintedError {
 
 impl std::error::Error for PrintedError {}
 
+/// Headers that must never appear in verbose or debug output.
+const SECRET_HEADERS: &[&str] = &[
+    "authorization",
+    "x-api-key",
+    "x-epo-ops-key",
+    "x-epo-ops-secret",
+    "x-uspto-odp-key",
+];
+
+fn is_secret_header(name: &reqwest::header::HeaderName) -> bool {
+    SECRET_HEADERS.contains(&name.as_str())
+}
+
+/// Detect provider-key problems in an error response and produce a structured,
+/// agent-parseable hint. Returns None when the error is unrelated to keys.
+///
+/// Signals (from the backend's patentKeys middleware and provider libs):
+/// - `patent_provider_key_invalid`  → user-supplied keys were rejected
+/// - `EPO_CLIENT_ID` / `EPO_CLIENT_SECRET` in an error → no EPO keys anywhere
+/// - `USPTO_ODP_API_KEY` / "USPTO ODP API key not configured" → no USPTO key
+pub fn provider_keys_hint(status: u16, body: &Value) -> Option<Value> {
+    if status < 400 {
+        return None;
+    }
+    let text = body.to_string();
+    let (code, provider) = if text.contains("patent_provider_key_invalid") {
+        let provider = if text.to_lowercase().contains("uspto") {
+            "uspto"
+        } else {
+            "epo"
+        };
+        ("provider_keys_invalid", provider)
+    } else if text.contains("EPO_CLIENT_ID") || text.contains("EPO_CLIENT_SECRET") {
+        ("provider_keys_required", "epo")
+    } else if text.contains("USPTO_ODP_API_KEY")
+        || text.contains("USPTO ODP API key not configured")
+    {
+        ("provider_keys_required", "uspto")
+    } else {
+        return None;
+    };
+
+    Some(json!({
+        "code": code,
+        "provider": provider,
+        "requiresHumanIntervention": true,
+        "humanAction": "Run 'flowleap setup' (or 'flowleap keys set') in a terminal. Getting keys involves a browser signup, so an agent cannot complete this alone — ask the user.",
+        "nonInteractive": {
+            "command": if provider == "epo" {
+                "flowleap keys set epo --key <consumer-key> --secret <consumer-secret>"
+            } else {
+                "flowleap keys set uspto --key <api-key>"
+            },
+            "env": if provider == "epo" {
+                json!(["FLOWLEAP_EPO_KEY", "FLOWLEAP_EPO_SECRET"])
+            } else {
+                json!(["FLOWLEAP_USPTO_KEY"])
+            },
+        },
+        "signup": if provider == "epo" {
+            "https://developers.epo.org (free, 'My apps' → create app)"
+        } else {
+            "https://data.uspto.gov/apis/getting-started (free API key)"
+        },
+        "verify": "flowleap keys test",
+    }))
+}
+
+/// Human-readable info box for a provider-keys hint, printed to stderr so it
+/// never corrupts parseable stdout.
+pub fn print_keys_hint_box(hint: &Value) {
+    use colored::Colorize;
+    let provider = hint["provider"].as_str().unwrap_or("provider");
+    let invalid = hint["code"].as_str() == Some("provider_keys_invalid");
+    let title = if invalid {
+        format!("{} keys were rejected", provider.to_uppercase())
+    } else {
+        format!("{} keys required", provider.to_uppercase())
+    };
+    let signup = hint["signup"].as_str().unwrap_or("");
+    let command = hint["nonInteractive"]["command"].as_str().unwrap_or("");
+
+    eprintln!();
+    eprintln!(
+        "┌─ {} {}",
+        title.yellow().bold(),
+        "─".repeat(50_usize.saturating_sub(title.len()))
+    );
+    if invalid {
+        eprintln!(
+            "│ The backend rejected the configured {} credentials.",
+            provider.to_uppercase()
+        );
+    } else {
+        eprintln!(
+            "│ This command needs {} credentials and none are configured",
+            provider.to_uppercase()
+        );
+        eprintln!("│ (neither on this machine nor on the server).");
+    }
+    eprintln!("│");
+    eprintln!("│ Fix it (requires a human — keys come from a browser signup):");
+    eprintln!("│   {}   guided setup", "flowleap setup".cyan().bold());
+    eprintln!("│   {}", command.cyan());
+    eprintln!("│");
+    eprintln!("│ Get keys: {}", signup);
+    eprintln!("│ Verify:   {}", "flowleap keys test".cyan());
+    eprintln!("└{}", "─".repeat(64));
+}
+
 pub fn encode_url_component(value: &str) -> String {
     let mut encoded = String::new();
     for byte in value.bytes() {
@@ -47,14 +157,27 @@ impl Context {
     }
 
     fn apply_auth(&self, req: RequestBuilder) -> RequestBuilder {
-        if let Some(ref token) = self.credentials.token {
+        // The backend accepts exactly one credential shape: `Authorization:
+        // Bearer <token>` — a Clerk JWT or a personal API token (fl_pat_…).
+        // There is no X-API-Key path server-side.
+        let req = if let Some(ref token) = self.credentials.token {
             req.header("Authorization", format!("Bearer {}", token))
         } else if let Some(ref key) = self.credentials.api_key {
-            if key.starts_with("fl_org_") {
-                req.header("X-API-Key", key)
-            } else {
-                req.header("Authorization", format!("Bearer {}", key))
-            }
+            req.header("Authorization", format!("Bearer {}", key))
+        } else {
+            req
+        };
+
+        // BYOK provider keys, forwarded per-request. The EPO pair only travels
+        // complete — the backend 400s on half a pair.
+        let req = if let Some((key, secret)) = self.credentials.epo_pair() {
+            req.header("x-epo-ops-key", key)
+                .header("x-epo-ops-secret", secret)
+        } else {
+            req
+        };
+        if let Some(ref uspto) = self.credentials.uspto_key {
+            req.header("x-uspto-odp-key", uspto)
         } else {
             req
         }
@@ -90,7 +213,7 @@ impl Context {
         if self.verbose {
             eprintln!("{} {}", req.method(), req.url());
             for (key, val) in req.headers() {
-                if key != "authorization" && key != "x-api-key" {
+                if !is_secret_header(key) {
                     eprintln!("  {}: {}", key, val.to_str().unwrap_or("(binary)"));
                 }
             }
@@ -205,7 +328,7 @@ impl Context {
             eprintln!("  Status: {}", status);
         }
 
-        Ok(json!({
+        let mut envelope = json!({
             "ok": status.is_success(),
             "status": status.as_u16(),
             "contentType": headers
@@ -213,7 +336,22 @@ impl Context {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or(""),
             "body": body,
-        }))
+        });
+        // Surface Retry-After so agents know how long to back off on 429.
+        if let Some(retry_after) = headers.get("retry-after").and_then(|v| v.to_str().ok()) {
+            envelope["retryAfterSeconds"] = retry_after
+                .parse::<u64>()
+                .map(|secs| json!(secs))
+                .unwrap_or_else(|_| json!(retry_after));
+        }
+        // Provider-key problems get a structured hint so agents know this
+        // needs human intervention rather than a retry.
+        if !status.is_success() {
+            if let Some(hint) = provider_keys_hint(status.as_u16(), &envelope["body"]) {
+                envelope["providerKeysHint"] = hint;
+            }
+        }
+        Ok(envelope)
     }
 
     pub async fn execute_json_body_or_error(&self, req: RequestBuilder) -> Result<Value> {
@@ -224,7 +362,7 @@ impl Context {
         if envelope.get("ok").and_then(|v| v.as_bool()) == Some(true) {
             return Ok(envelope.get("body").cloned().unwrap_or(Value::Null));
         }
-        crate::output::print_value(&self.output_format, &envelope, &[]);
+        self.print_error_envelope(&envelope);
         Err(PrintedError.into())
     }
 
@@ -235,8 +373,19 @@ impl Context {
         {
             return Ok(envelope);
         }
-        crate::output::print_value(&self.output_format, &envelope, &[]);
+        self.print_error_envelope(&envelope);
         Err(PrintedError.into())
+    }
+
+    /// Print an error envelope; in human/table formats also render the
+    /// provider-keys info box (stderr) when the failure is key-related.
+    fn print_error_envelope(&self, envelope: &Value) {
+        crate::output::print_value(&self.output_format, envelope, &[]);
+        if self.output_format != "json" {
+            if let Some(hint) = envelope.get("providerKeysHint") {
+                print_keys_hint_box(hint);
+            }
+        }
     }
 
     /// Require authentication, returning an error if not configured
@@ -255,7 +404,7 @@ impl Context {
     fn print_request(&self, req: &Request) {
         eprintln!("{} {}", req.method(), req.url());
         for (key, val) in req.headers() {
-            if key != "authorization" && key != "x-api-key" {
+            if !is_secret_header(key) {
                 eprintln!("  {}: {}", key, val.to_str().unwrap_or("(binary)"));
             }
         }
@@ -272,6 +421,11 @@ impl Context {
             "method": req.method().as_str(),
             "url": req.url().as_str(),
             "authenticated": req.headers().contains_key("authorization") || req.headers().contains_key("x-api-key"),
+            // Presence only — the key material itself never appears in output.
+            "providerKeys": {
+                "epo": req.headers().contains_key("x-epo-ops-key"),
+                "uspto": req.headers().contains_key("x-uspto-odp-key"),
+            },
             "body": body,
         });
 

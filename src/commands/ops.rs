@@ -84,24 +84,24 @@ pub async fn run(ctx: &Context, args: OpsArgs) -> Result<()> {
 }
 
 async fn search(ctx: &Context, cql: &str, start: u32, end: u32) -> Result<()> {
+    // The backend expects a "start-end" range string, not separate fields.
     let body = json!({
         "query": cql,
-        "start": start,
-        "end": end,
+        "range": format!("{}-{}", start, end),
     });
 
     let req = ctx.post("/v1/patent-search", &body);
     let result = ctx.execute_json_body_or_error(req).await?;
 
     let columns = &[
-        ("publicationNumber", "Patent ID"),
+        ("docId", "Patent ID"),
         ("title", "Title"),
-        ("applicant", "Applicant"),
+        ("applicants", "Applicants"),
         ("publicationDate", "Date"),
     ];
 
-    if let Some(results) = result.get("results") {
-        output::print_value(&ctx.output_format, results, columns);
+    if let Some(docs) = result.get("docs") {
+        output::print_value(&ctx.output_format, docs, columns);
     } else {
         output::print_value(&ctx.output_format, &result, columns);
     }
@@ -130,14 +130,27 @@ async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>)
             .get("error")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown error");
-        let error = json!({
+        let status = envelope
+            .get("status")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(500) as u16;
+        let mut error = json!({
             "ok": false,
             "error": {
                 "code": code,
                 "message": message,
             }
         });
+        let hint = crate::client::provider_keys_hint(status, &envelope);
+        if let Some(ref hint) = hint {
+            error["providerKeysHint"] = hint.clone();
+        }
         output::print_value(&ctx.output_format, &error, &[]);
+        if ctx.output_format != "json" {
+            if let Some(ref hint) = hint {
+                crate::client::print_keys_hint_box(hint);
+            }
+        }
         return Err(crate::client::PrintedError.into());
     }
 
