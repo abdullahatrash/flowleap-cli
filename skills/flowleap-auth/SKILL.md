@@ -55,6 +55,11 @@ keys. Use `--session-only` to drop just the browser-session token — useful
 when an expired session token is shadowing a still-valid `fl_pat_` API key
 (the CLI prefers the session token when both are stored).
 
+Since v0.2.3 the CLI self-heals this case: on a 401 with a stored session
+token, it retries once with the stored API key and prints a stderr warning
+suggesting `logout --session-only`. The fallback is skipped when the token
+was passed explicitly via `--token` or `FLOWLEAP_TOKEN`.
+
 ## Environment Variable Override
 
 Set `FLOWLEAP_API_KEY` or `FLOWLEAP_TOKEN` to bypass stored credentials entirely. These take effect without running `auth login`.

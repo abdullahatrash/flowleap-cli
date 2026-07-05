@@ -144,6 +144,10 @@ pub struct Context {
     pub output_format: String,
     pub dry_run: bool,
     pub verbose: bool,
+    /// True when the session token came from --token / FLOWLEAP_TOKEN rather
+    /// than the credential store. An explicit token expresses intent, so the
+    /// 401 → api_key fallback is disabled.
+    pub token_overridden: bool,
     pub http: Client,
 }
 
@@ -206,6 +210,54 @@ impl Context {
         self.apply_auth(req)
     }
 
+    /// The API key to retry with when the stored session token is rejected
+    /// with a 401. None when there is nothing to fall back to: no session
+    /// token in play, no stored api_key, or the token was passed explicitly
+    /// (--token / FLOWLEAP_TOKEN).
+    pub fn auth_fallback_key(&self) -> Option<&str> {
+        if self.token_overridden || self.credentials.token.is_none() {
+            return None;
+        }
+        self.credentials.api_key.as_deref()
+    }
+
+    /// Send a request; on 401 with a stored session token, retry once with
+    /// the stored API key. A Clerk session token expires quickly and would
+    /// otherwise shadow a still-valid fl_pat_ key (see auth_header precedence).
+    async fn send_with_auth_fallback(&self, req: Request) -> Result<Response> {
+        let retry = match self.auth_fallback_key() {
+            Some(key) if req.headers().contains_key(reqwest::header::AUTHORIZATION) => {
+                req.try_clone().and_then(|mut r| {
+                    reqwest::header::HeaderValue::from_str(&format!("Bearer {}", key))
+                        .ok()
+                        .map(|v| {
+                            r.headers_mut().insert(reqwest::header::AUTHORIZATION, v);
+                            r
+                        })
+                })
+            }
+            _ => None,
+        };
+
+        let resp = self.client().execute(req).await?;
+        if resp.status() != reqwest::StatusCode::UNAUTHORIZED {
+            return Ok(resp);
+        }
+        let Some(retry) = retry else { return Ok(resp) };
+
+        if self.verbose {
+            eprintln!("  401 with session token — retrying with stored API key");
+        }
+        let retry_resp = self.client().execute(retry).await?;
+        if retry_resp.status().is_success() {
+            eprintln!(
+                "warning: the stored session token was rejected (401); the request succeeded with the stored API key. \
+                 Clear the stale session with 'flowleap auth logout --session-only'."
+            );
+        }
+        Ok(retry_resp)
+    }
+
     /// Execute a request, handling dry-run and verbose modes
     pub async fn execute(&self, req: RequestBuilder) -> Result<Response> {
         let req = req.build()?;
@@ -231,7 +283,7 @@ impl Context {
             bail!("Dry run — no request was sent");
         }
 
-        let resp = self.client().execute(req).await?;
+        let resp = self.send_with_auth_fallback(req).await?;
 
         if self.verbose {
             eprintln!("  Status: {}", resp.status());
@@ -258,7 +310,7 @@ impl Context {
             return self.dry_run_response(&req);
         }
 
-        let resp = self.client().execute(req).await?;
+        let resp = self.send_with_auth_fallback(req).await?;
 
         if self.verbose {
             eprintln!("  Status: {}", resp.status());
@@ -289,7 +341,7 @@ impl Context {
             return self.dry_run_response(&req);
         }
 
-        let resp = self.client().execute(req).await?;
+        let resp = self.send_with_auth_fallback(req).await?;
 
         if self.verbose {
             eprintln!("  Status: {}", resp.status());
@@ -318,7 +370,7 @@ impl Context {
             return self.dry_run_response(&req);
         }
 
-        let resp = self.client().execute(req).await?;
+        let resp = self.send_with_auth_fallback(req).await?;
         let status = resp.status();
         let headers = resp.headers().clone();
         let text = resp.text().await.unwrap_or_default();
