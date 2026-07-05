@@ -97,6 +97,12 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
 
+    # id-token lets npm attach signed provenance linking the package to this
+    # exact repo, commit, and workflow run (visible on the npm package page).
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -109,11 +115,11 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cd npm
-          # install.mjs reads VERSION from package.json at install time,
+          # download.mjs reads the version from package.json at first run,
           # so bumping package.json here is sufficient.
           sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
 
       - name: Publish to npm
-        run: cd npm && npm publish --access public
+        run: cd npm && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
