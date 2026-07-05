@@ -168,6 +168,7 @@ CLI flags > environment variables > config file
 | `FLOWLEAP_API_KEY` | API key for authentication |
 | `FLOWLEAP_TOKEN` | Bearer token for authentication |
 | `FLOWLEAP_BASE_URL` | API base URL |
+| `FLOWLEAP_NO_UPDATE_CHECK` | Disable the once-a-day update notice (it is already skipped for `--json`, `--dry-run`, and non-TTY runs) |
 
 ## Global Flags
 

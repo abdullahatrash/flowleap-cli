@@ -4,7 +4,7 @@ use flowleap_cli::commands::{
     academic, api, auth, citation, config_cmd, doctor, health, keys, legal, npl, ops, patent,
     skills, tools, uspto,
 };
-use flowleap_cli::{client, config};
+use flowleap_cli::{client, config, update};
 use serde_json::json;
 
 /// One CLI for FlowLeap Patent AI — built for humans and AI agents.
@@ -225,17 +225,33 @@ async fn run(cli: Cli) -> Result<()> {
         && !cli.json
         && std::io::IsTerminal::is_terminal(&std::io::stdin())
         && std::io::IsTerminal::is_terminal(&std::io::stderr());
-    if wants_first_run && offer_first_run_setup(&ctx).await? {
+    // Once-a-day update notice. Spawned before the command so the registry
+    // fetch overlaps its work; printed to stderr after it finishes.
+    let update_check = update::spawn_check(&ctx.http, cli.json, cli.dry_run);
+
+    let result = if wants_first_run && offer_first_run_setup(&ctx).await? {
         // Reload credentials the wizard just wrote and continue the command.
         let creds = config::Credentials::load()?;
         let ctx = client::Context {
             credentials: creds,
             ..ctx
         };
-        return dispatch(cli.command, &ctx).await;
+        dispatch(cli.command, &ctx).await
+    } else {
+        dispatch(cli.command, &ctx).await
+    };
+
+    if let Some(handle) = update_check {
+        // Grace period sized just above the check's own fetch timeout so the
+        // task always resolves (answer or timeout) instead of being cancelled
+        // mid-flight. Only the one fetch run per day can wait here at all;
+        // cached runs resolve instantly.
+        if let Ok(Ok(Some(notice))) = tokio::time::timeout(update::CHECK_GRACE, handle).await {
+            eprintln!("{}", notice);
+        }
     }
 
-    dispatch(cli.command, &ctx).await
+    result
 }
 
 /// Commands that hit an authenticated endpoint (everything except local/auth-
