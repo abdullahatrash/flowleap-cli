@@ -34,8 +34,13 @@ enum AuthCommand {
         #[arg(long)]
         token: Option<String>,
     },
-    /// Clear stored credentials
-    Logout,
+    /// Clear stored credentials (everything, including provider keys)
+    Logout {
+        /// Clear only the OAuth session token; keep the API key and
+        /// EPO/USPTO provider keys
+        #[arg(long)]
+        session_only: bool,
+    },
     /// Show current authentication status
     Status,
     /// Create a personal API token (fl_pat_…) for headless/agent use
@@ -59,7 +64,7 @@ enum AuthCommand {
 pub async fn run(ctx: &Context, args: AuthArgs) -> Result<()> {
     match args.command {
         AuthCommand::Login { api_key, token } => login(ctx, api_key, token).await,
-        AuthCommand::Logout => logout().await,
+        AuthCommand::Logout { session_only } => logout(session_only).await,
         AuthCommand::Status => status(ctx).await,
         AuthCommand::CreateToken { name, store } => create_token(ctx, &name, store).await,
         AuthCommand::Tokens => list_tokens(ctx).await,
@@ -343,11 +348,30 @@ pub async fn mint_and_store_token(auth_ctx: &Context, name: &str) -> Result<Stri
     Ok(format!("{}…", prefix))
 }
 
-async fn logout() -> Result<()> {
+async fn logout(session_only: bool) -> Result<()> {
     let mut creds = Credentials::load()?;
-    creds.clear();
-    creds.save()?;
-    println!("{} Credentials cleared.", "✓".green());
+    if session_only {
+        if creds.token.is_none() {
+            println!("No session token stored — nothing to clear.");
+            return Ok(());
+        }
+        creds.clear_session();
+        creds.save()?;
+        println!(
+            "{} Session token cleared. API key and provider keys kept.",
+            "✓".green()
+        );
+        if creds.api_key.is_some() {
+            println!("Requests will now authenticate with the stored API key.");
+        }
+    } else {
+        creds.clear();
+        creds.save()?;
+        println!(
+            "{} All credentials cleared (session, API key, provider keys).",
+            "✓".green()
+        );
+    }
     Ok(())
 }
 

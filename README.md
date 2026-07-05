@@ -111,8 +111,11 @@ Credentials are stored in `~/.config/flowleap/credentials.toml` (mode 0600).
 # Check auth status
 flowleap auth status
 
-# Clear credentials
+# Clear all credentials (including provider keys)
 flowleap auth logout
+
+# Clear only the OAuth session token (keep API key + provider keys)
+flowleap auth logout --session-only
 ```
 
 ## Commands

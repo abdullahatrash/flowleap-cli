@@ -132,6 +132,14 @@ impl Credentials {
         self.uspto_key = None;
     }
 
+    /// Clear only the OAuth session (token + refresh token), keeping the
+    /// API key and BYOK provider keys. An expired session token would
+    /// otherwise shadow a still-valid api_key in auth_header().
+    pub fn clear_session(&mut self) {
+        self.token = None;
+        self.refresh_token = None;
+    }
+
     /// EPO pair, only when complete (the backend rejects half a pair).
     pub fn epo_pair(&self) -> Option<(&str, &str)> {
         match (self.epo_key.as_deref(), self.epo_secret.as_deref()) {

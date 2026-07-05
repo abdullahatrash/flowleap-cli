@@ -112,6 +112,28 @@ fn test_credentials_clear() {
     assert!(creds.refresh_token.is_none());
 }
 
+/// Test that clear_session removes only the OAuth session, so a stored
+/// api_key becomes the auth_header credential again
+#[test]
+fn test_credentials_clear_session() {
+    let mut creds = Credentials {
+        api_key: Some("fl_pat_key".to_string()),
+        token: Some("expired-jwt".to_string()),
+        refresh_token: Some("refresh".to_string()),
+        epo_key: Some("epo".to_string()),
+        epo_secret: Some("secret".to_string()),
+        uspto_key: Some("uspto".to_string()),
+    };
+    creds.clear_session();
+    assert!(creds.token.is_none());
+    assert!(creds.refresh_token.is_none());
+    assert_eq!(creds.api_key.as_deref(), Some("fl_pat_key"));
+    assert_eq!(creds.epo_key.as_deref(), Some("epo"));
+    assert_eq!(creds.epo_secret.as_deref(), Some("secret"));
+    assert_eq!(creds.uspto_key.as_deref(), Some("uspto"));
+    assert_eq!(creds.auth_header(), Some("Bearer fl_pat_key".to_string()));
+}
+
 /// Test that a manually-written Config TOML can be parsed and round-tripped
 /// on disk. Uses a tempdir for the raw file; doesn't exercise Config::save()/
 /// Config::load() because those target ~/.config/flowleap and aren't

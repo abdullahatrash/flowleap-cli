@@ -36,8 +36,11 @@ flowleap auth login --token eyJ...
 # Check status
 flowleap auth status
 
-# Clear credentials
+# Clear all credentials (including provider keys)
 flowleap auth logout
+
+# Clear only the OAuth session token (keep API key + provider keys)
+flowleap auth logout --session-only
 ```
 
 Environment variable overrides (highest priority):
