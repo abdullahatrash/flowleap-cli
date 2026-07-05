@@ -1,12 +1,9 @@
 {
   "name": "flowleap",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "One CLI for FlowLeap Patent AI — built for humans and AI agents",
   "bin": {
     "flowleap": "bin/flowleap"
-  },
-  "scripts": {
-    "postinstall": "node install.mjs"
   },
   "keywords": [
     "patent",
@@ -25,6 +22,6 @@
   },
   "homepage": "https://flowleap.co",
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   }
 }

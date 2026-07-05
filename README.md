@@ -11,6 +11,12 @@ A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Se
 npm i -g flowleap
 ```
 
+The npm package has no install scripts. The native binary is downloaded on
+first run from the matching GitHub release, verified against the release's
+sha256 `checksums.txt` before it executes, and the package is published with
+[npm provenance](https://docs.npmjs.com/generating-provenance-statements)
+attesting the exact repo, commit, and CI run that built it.
+
 **Quick install (macOS / Linux):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
