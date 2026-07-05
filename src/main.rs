@@ -211,6 +211,7 @@ async fn run(cli: Cli) -> Result<()> {
         output_format,
         dry_run: cli.dry_run,
         verbose: cli.verbose,
+        token_overridden: cli.token.is_some(),
         http: reqwest::Client::new(),
     };
 

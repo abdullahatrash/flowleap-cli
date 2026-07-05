@@ -221,3 +221,40 @@ fn test_credentials_backwards_compatible_parse() {
     assert_eq!(parsed.epo_pair(), None);
     assert!(parsed.uspto_key.is_none());
 }
+
+/// The 401 → api_key fallback only applies to a session token that came from
+/// the credential store, alongside a stored api_key. An explicit --token /
+/// FLOWLEAP_TOKEN (token_overridden) disables it.
+#[test]
+fn test_auth_fallback_key_gating() {
+    use flowleap_cli::client::Context;
+
+    let ctx = |token: Option<&str>, api_key: Option<&str>, overridden: bool| Context {
+        config: Config::default(),
+        credentials: Credentials {
+            token: token.map(String::from),
+            api_key: api_key.map(String::from),
+            ..Default::default()
+        },
+        output_format: "json".to_string(),
+        dry_run: false,
+        verbose: false,
+        token_overridden: overridden,
+        http: reqwest::Client::new(),
+    };
+
+    // Stored session token + stored api_key → fallback available
+    assert_eq!(
+        ctx(Some("jwt"), Some("fl_pat_x"), false).auth_fallback_key(),
+        Some("fl_pat_x")
+    );
+    // Explicit --token / FLOWLEAP_TOKEN → no fallback
+    assert_eq!(
+        ctx(Some("jwt"), Some("fl_pat_x"), true).auth_fallback_key(),
+        None
+    );
+    // No session token in play → nothing to fall back from
+    assert_eq!(ctx(None, Some("fl_pat_x"), false).auth_fallback_key(), None);
+    // No api_key → nothing to fall back to
+    assert_eq!(ctx(Some("jwt"), None, false).auth_fallback_key(), None);
+}
