@@ -46,10 +46,14 @@ Shows: base URL, authentication method, default model, and user profile (if auth
 ### Logout
 
 ```bash
-flowleap auth logout
+flowleap auth logout                # clear everything, including provider keys
+flowleap auth logout --session-only # clear only the OAuth session token
 ```
 
-Clears all stored credentials.
+Plain `logout` clears all stored credentials, including EPO/USPTO provider
+keys. Use `--session-only` to drop just the browser-session token — useful
+when an expired session token is shadowing a still-valid `fl_pat_` API key
+(the CLI prefers the session token when both are stored).
 
 ## Environment Variable Override
 
