@@ -1,0 +1,18 @@
+---
+name: flowleap-npl
+description: Search non-patent literature (scholarly works via OpenAlex) with year, open-access and publication-type filters. Trigger when an agent needs journal articles, conference papers or preprints as prior art or scientific background — complementary to flowleap-academic (Semantic Scholar/arXiv).
+---
+
+# FlowLeap NPL Search (OpenAlex)
+
+```bash
+flowleap --json npl "perovskite solar cell stability" --limit 5
+flowleap --json npl "CRISPR delivery" --from-year 2020 --to-year 2024 --open-access
+flowleap --json npl "transformer attention" --type preprint
+```
+
+Flags: `--limit N`, `--page N`, `--from-year/--to-year`, `--open-access`,
+`--type journal-article|book-chapter|proceedings-article|preprint`.
+
+Results include DOI, abstract, `citedByCount`, open-access URLs and author
+lists — use DOI + title when citing prior art.

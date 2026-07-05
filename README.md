@@ -33,8 +33,11 @@ flowleap --json doctor --base-url http://localhost:8000
 # Authenticate (opens browser for OAuth)
 flowleap auth login
 
-# Or use an API key directly
-flowleap auth login --api-key sk-...
+# Or mint a long-lived personal API token for headless/agent use
+flowleap auth create-token --name my-agent --store
+
+# One-time guided setup (auth + BYOK provider keys)
+flowleap setup
 
 # Search patents
 flowleap patent search --query "solar panel efficiency"
@@ -94,13 +97,15 @@ flowleap --json patent build-query "battery cooling system for electric vehicles
 
 ## Authentication
 
-FlowLeap CLI supports three authentication methods:
+FlowLeap CLI supports three authentication methods (all sent as `Authorization: Bearer`):
 
-1. **OAuth 2.0 Device Flow** (recommended): `flowleap auth login` opens your browser
-2. **API key**: `flowleap auth login --api-key sk-...`
-3. **Environment variables**: `FLOWLEAP_API_KEY` or `FLOWLEAP_TOKEN`
+1. **OAuth 2.0 Device Flow** (recommended for humans): `flowleap auth login` opens your browser
+2. **Personal API token** (recommended for agents/CI): `flowleap auth create-token --name <n> --store` mints a revocable `fl_pat_…` token (list with `auth tokens`, revoke with `auth revoke-token`)
+3. **Environment variables**: `FLOWLEAP_API_KEY` (an `fl_pat_…` token) or `FLOWLEAP_TOKEN`
 
-Credentials are stored in `~/.config/flowleap/credentials.toml`.
+Patent providers may also need your own keys (EPO OPS, USPTO ODP) — run `flowleap setup` or see `flowleap keys --help`.
+
+Credentials are stored in `~/.config/flowleap/credentials.toml` (mode 0600).
 
 ```bash
 # Check auth status

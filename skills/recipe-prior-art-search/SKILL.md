@@ -26,8 +26,8 @@ Take note of the generated CQL query.
 ### Step 2: Search Patents (EPO + USPTO)
 
 ```bash
-flowleap patent search --query "<CQL from step 1>" --source epo --limit 20 --output json
-flowleap patent search --query "<CQL from step 1>" --source uspto --limit 20 --output json
+flowleap patent search --query "<CQL from step 1>" --limit 20 --output json
+flowleap uspto search --query "<CQL from step 1>" --limit 20 --output json   # USPTO uses ODP Lucene syntax, not CQL
 ```
 
 ### Step 3: Search Academic Literature

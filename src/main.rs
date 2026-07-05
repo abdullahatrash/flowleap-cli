@@ -1,7 +1,8 @@
 use anyhow::Result;
 use clap::{error::ErrorKind, Parser, Subcommand};
 use flowleap_cli::commands::{
-    academic, api, auth, citation, config_cmd, doctor, health, legal, npl, ops, patent, uspto,
+    academic, api, auth, citation, config_cmd, doctor, health, keys, legal, npl, ops, patent,
+    skills, tools, uspto,
 };
 use flowleap_cli::{client, config};
 use serde_json::json;
@@ -47,6 +48,10 @@ struct Cli {
 enum Commands {
     /// Check CLI config, auth, and backend reachability
     Doctor,
+    /// Interactive onboarding: backend check, auth, provider keys (human-only)
+    Setup,
+    /// Manage patent-provider keys (EPO OPS, USPTO ODP)
+    Keys(keys::KeysArgs),
     /// Store initial CLI configuration
     Init {
         /// API base URL to store
@@ -73,6 +78,10 @@ enum Commands {
     Legal(legal::LegalArgs),
     /// Search USPTO citation/prior-art data
     Citation(citation::CitationArgs),
+    /// Discover and run backend tools (agent-first /v1/tools facade)
+    Tools(tools::ToolsArgs),
+    /// Install FlowLeap agent skills into an agent's skills directory
+    Skills(skills::SkillsArgs),
     /// Manage CLI configuration
     Config(config_cmd::ConfigArgs),
 }
@@ -163,6 +172,30 @@ async fn run(cli: Cli) -> Result<()> {
         creds.token = Some(tok.clone());
     }
 
+    // fl_org_ keys were a v0.1.x concept with no working backend path; they now
+    // travel as Bearer and always 401. Warn instead of failing mysteriously.
+    if creds
+        .api_key
+        .as_deref()
+        .is_some_and(|k| k.starts_with("fl_org_"))
+    {
+        eprintln!(
+            "warning: fl_org_ organization keys are not supported (the backend never accepted them). \
+             Mint a personal token instead: flowleap auth login && flowleap auth create-token --name <name> --store"
+        );
+    }
+
+    // Provider-key env overrides (headless/agent path; humans use `flowleap setup`).
+    if let Ok(value) = std::env::var("FLOWLEAP_EPO_KEY") {
+        creds.epo_key = Some(value);
+    }
+    if let Ok(value) = std::env::var("FLOWLEAP_EPO_SECRET") {
+        creds.epo_secret = Some(value);
+    }
+    if let Ok(value) = std::env::var("FLOWLEAP_USPTO_KEY") {
+        creds.uspto_key = Some(value);
+    }
+
     let output_format = if cli.json {
         "json".to_string()
     } else {
@@ -183,6 +216,8 @@ async fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Commands::Doctor => doctor::run(&ctx).await,
+        Commands::Setup => keys::setup_wizard(&ctx).await,
+        Commands::Keys(args) => keys::run(&ctx, args).await,
         Commands::Init { base_url } => init(&ctx, &base_url).await,
         Commands::Auth(args) => auth::run(&ctx, args).await,
         Commands::Api(args) => api::run(&ctx, args).await,
@@ -194,6 +229,8 @@ async fn run(cli: Cli) -> Result<()> {
         Commands::Npl(args) => npl::run(&ctx, args).await,
         Commands::Legal(args) => legal::run(&ctx, args).await,
         Commands::Citation(args) => citation::run(&ctx, args).await,
+        Commands::Tools(args) => tools::run(&ctx, args).await,
+        Commands::Skills(args) => skills::run(&ctx, args),
         Commands::Config(args) => config_cmd::run(&ctx, args).await,
     }
 }

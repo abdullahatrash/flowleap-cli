@@ -51,6 +51,17 @@ pub async fn run(ctx: &Context) -> Result<()> {
             "defaultModel": ctx.config.default_model,
             "outputFormat": ctx.config.output_format,
         },
+        "providerKeys": {
+            "epo": ctx.credentials.epo_pair().is_some(),
+            "epoIncompletePair": ctx.credentials.epo_pair().is_none()
+                && (ctx.credentials.epo_key.is_some() || ctx.credentials.epo_secret.is_some()),
+            "uspto": ctx.credentials.uspto_key.is_some(),
+            "setup": if ctx.credentials.epo_pair().is_some() && ctx.credentials.uspto_key.is_some() {
+                serde_json::Value::Null
+            } else {
+                json!("Missing keys may be fine if the server has its own — check with 'flowleap keys test'. Add local keys via 'flowleap setup' (interactive) or 'flowleap keys set <provider>'.")
+            },
+        },
         "backend": {
             "reachable": reachable,
             "healthStatus": status,

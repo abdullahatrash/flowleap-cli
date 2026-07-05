@@ -24,10 +24,18 @@ All four must pass before submitting changes.
 | `src/client.rs` | HTTP client context — auth injection, request building, dry-run/verbose |
 | `src/output.rs` | Output module (re-exports formatter) |
 | `src/output/formatter.rs` | JSON, table, and human-readable output formatting |
-| `src/commands/auth.rs` | OAuth 2.0 Device Authorization flow, API key login, status |
-| `src/commands/patent.rs` | Patent search and CQL query builder |
-| `src/commands/academic.rs` | Academic literature search |
+| `src/commands/auth.rs` | OAuth device flow, personal API tokens (create/list/revoke), status |
+| `src/commands/tools.rs` | Agent-first tool facade: list/describe/run `/v1/tools/*` |
+| `src/commands/skills.rs` | Embedded agent-skill installer (`skills/` baked into binary) |
+| `src/commands/patent.rs` | EPO patent search (CQL) and CQL query builder |
+| `src/commands/uspto.rs` | USPTO ODP search, grants, applications, continuity, query builder |
 | `src/commands/ops.rs` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |
+| `src/commands/academic.rs` | Academic literature search |
+| `src/commands/npl.rs` | Non-patent literature search (OpenAlex) |
+| `src/commands/legal.rs` | Patent-law document search (legal RAG) |
+| `src/commands/citation.rs` | USPTO enriched citation search |
+| `src/commands/api.rs` | Profile/usage + raw API escape hatch |
+| `src/commands/health.rs` / `doctor.rs` | Health probes and environment diagnosis |
 | `src/commands/config_cmd.rs` | CLI configuration management |
 
 ## Command Structure
@@ -44,21 +52,70 @@ CLI flags > environment variables > `~/.config/flowleap/config.toml`
 
 ## Authentication
 
-Three methods (checked in order):
+Every authenticated request sends `Authorization: Bearer <credential>` — the
+backend has **no** `X-API-Key` path. The credential is either a Clerk JWT (from
+the OAuth device flow) or a long-lived personal API token (`fl_pat_…`).
+
+Credential sources (checked in order):
 1. `--token` flag or `FLOWLEAP_TOKEN` env var
-2. `--api-key` flag or `FLOWLEAP_API_KEY` env var
-3. Stored credentials in `~/.config/flowleap/credentials.toml`
+2. `--api-key` flag or `FLOWLEAP_API_KEY` env var (use an `fl_pat_…` token here)
+3. Stored credentials in `~/.config/flowleap/credentials.toml` (written 0600)
+
+Token lifecycle: `flowleap auth login` (OAuth) → `flowleap auth create-token
+--name <n> [--store]` → `flowleap auth tokens` / `flowleap auth revoke-token <id>`.
+API tokens cannot mint further tokens (backend-enforced).
+
+All `/v1/*` patent-data routes additionally require an active subscription
+(402 `subscription_required` with an `upgradeUrl`) and share a fixed
+60 requests/minute/user rate limit (429 + `Retry-After`, surfaced as
+`retryAfterSeconds` in JSON error envelopes).
+
+## Provider Keys (BYOK)
+
+Patent data may require the user's own provider credentials — EPO OPS
+(consumer key + secret, a pair) and USPTO ODP (API key). The CLI stores them in
+`credentials.toml` (0600) and forwards them per-request as
+`x-epo-ops-key`/`x-epo-ops-secret`/`x-uspto-odp-key` headers; they are never
+logged (verbose/dry-run output redacts them).
+
+- `flowleap setup` / `flowleap keys setup` — interactive wizard (**human-only**:
+  keys come from browser signups; refuses to run without a TTY)
+- `flowleap keys set epo --key <k> --secret <s>` / `keys set uspto --key <k>` —
+  non-interactive; validates live before saving (`--no-verify` to skip)
+- `flowleap keys list` (masked) / `keys test` (live verdicts via
+  `POST /v1/keys/validate`) / `keys rm <provider>`
+- Env overrides: `FLOWLEAP_EPO_KEY`, `FLOWLEAP_EPO_SECRET`, `FLOWLEAP_USPTO_KEY`
+
+**Agent protocol:** when a command fails because keys are missing or rejected,
+the JSON error envelope carries a `providerKeysHint` object with
+`code` (`provider_keys_required` | `provider_keys_invalid`), `provider`, and
+`requiresHumanIntervention: true`. Do NOT retry or invent keys — surface the
+hint and ask the user to run `flowleap setup` (or provide keys via env/flags).
+Human/table output renders the same hint as an info box on stderr.
 
 ## API Endpoints
+
+The `/v1/tools/*` facade is the preferred agent surface: `flowleap tools list`
+discovers every tool with its JSON input schema, `flowleap tools run <name>`
+executes one. Provider-specific routes remain for humans and compatibility.
 
 | Endpoint | Method | Auth Required |
 |----------|--------|---------------|
 | `/oauth/device` | POST | No |
 | `/oauth/device/token` | POST | No |
-| `/oauth/device/approve` | POST | Yes |
+| `/v1/tools` | GET | Yes |
+| `/v1/tools/openapi.json` | GET | Yes |
+| `/v1/tools/{tool_name}` | POST | Yes |
 | `/v1/patent-search` | POST | Yes |
 | `/v1/build-patent-query` | POST | Yes |
+| `/v1/build-uspto-query` | POST | Yes |
 | `/v1/academic-search` | POST | Yes |
+| `/v1/npl-search` | POST | Yes |
+| `/v1/legal-search` (+ `/stats`, `/jurisdictions`, `/docs`) | POST/GET | Yes |
+| `/v1/citation-search` (+ `/forward`, `/stats/{n}`, `/novelty/{n}`) | POST/GET | Yes |
+| `/v1/patent-search-uspto/search` | POST | Yes |
+| `/v1/patent-search-uspto/grants/{patentNumber}` | GET | Yes |
+| `/v1/patent-search-uspto/applications/{appNumber}` (+ `/continuity`) | GET | Yes |
 | `/v1/ops/biblio?doc={id}` | GET | Yes |
 | `/v1/ops/abstract?doc={id}` | GET | Yes |
 | `/v1/ops/family?doc={id}` | GET | Yes |
@@ -67,6 +124,9 @@ Three methods (checked in order):
 | `/v1/ops/fulltext/description?doc={id}&lang={lang}` | GET | Yes |
 | `/api/profile` | GET | Yes |
 | `/api/usage` | GET | Yes |
+| `/api/tokens` (create/list) | POST/GET | Yes (create requires Clerk auth, not an API token) |
+| `/api/tokens/{id}` | DELETE | Yes |
+| `/v1/keys/validate` | POST | Yes (no subscription required) |
 
 OPS endpoints wrap payloads in a response envelope:
 

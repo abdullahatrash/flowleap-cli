@@ -28,6 +28,12 @@ pub struct Credentials {
     pub api_key: Option<String>,
     pub token: Option<String>,
     pub refresh_token: Option<String>,
+    /// BYOK patent-provider credentials, forwarded per-request as headers
+    /// (x-epo-ops-key / x-epo-ops-secret / x-uspto-odp-key). EPO key and
+    /// secret only work as a pair — the backend rejects half a pair.
+    pub epo_key: Option<String>,
+    pub epo_secret: Option<String>,
+    pub uspto_key: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -85,7 +91,27 @@ impl Credentials {
     pub fn save(&self) -> Result<()> {
         let path = Self::credentials_path()?;
         let contents = toml::to_string_pretty(self)?;
-        fs::write(path, contents)?;
+        // Credentials are secrets: create the file 0600 from the start —
+        // write-then-chmod would leave a world-readable window on first save.
+        #[cfg(unix)]
+        {
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&path)?;
+            file.write_all(contents.as_bytes())?;
+            // Pre-existing files keep their old mode; tighten those too.
+            fs::set_permissions(&path, {
+                use std::os::unix::fs::PermissionsExt;
+                fs::Permissions::from_mode(0o600)
+            })?;
+        }
+        #[cfg(not(unix))]
+        fs::write(&path, contents)?;
         Ok(())
     }
 
@@ -101,5 +127,16 @@ impl Credentials {
         self.api_key = None;
         self.token = None;
         self.refresh_token = None;
+        self.epo_key = None;
+        self.epo_secret = None;
+        self.uspto_key = None;
+    }
+
+    /// EPO pair, only when complete (the backend rejects half a pair).
+    pub fn epo_pair(&self) -> Option<(&str, &str)> {
+        match (self.epo_key.as_deref(), self.epo_secret.as_deref()) {
+            (Some(key), Some(secret)) => Some((key, secret)),
+            _ => None,
+        }
     }
 }

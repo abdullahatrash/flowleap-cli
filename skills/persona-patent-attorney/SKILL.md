@@ -43,8 +43,8 @@ flowleap ops description EP3456789
 
 ```bash
 # Search for blocking patents
-flowleap patent search --query "wireless charging electric vehicle" --source epo --limit 30
-flowleap patent search --query "wireless charging electric vehicle" --source uspto --limit 30
+flowleap patent search --query "wireless charging electric vehicle" --limit 30
+flowleap uspto search --query "wireless charging electric vehicle" --limit 30   # USPTO uses ODP Lucene syntax, not CQL
 
 # Check legal status of potential blocking patents
 flowleap ops legal EP3456789

@@ -25,9 +25,11 @@ Posts to `/v1/patent-search`. Returns patent results with publication number, ti
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--query`, `-q` | Search query (required) | — |
-| `--source` | Database: `epo`, `uspto` | `epo` |
-| `--limit` | Maximum results | `10` |
+| `--query`, `-q` | EPO CQL query (required) — e.g. `ti="battery separator"` | — |
+| `--limit` | Maximum results (1-100) | `10` |
+| `--countries` | Country filter, comma-separated (e.g. `EP,WO`) | none |
+
+For US-specific searches use `flowleap uspto search` (ODP Lucene syntax).
 
 #### Examples
 
@@ -36,7 +38,7 @@ Posts to `/v1/patent-search`. Returns patent results with publication number, ti
 flowleap patent search --query "solar panel efficiency"
 
 # USPTO source with limit
-flowleap patent search --query "lithium battery" --source uspto --limit 20
+flowleap uspto search --query "lithium battery" --limit 20   # USPTO uses ODP Lucene syntax, not CQL
 
 # JSON output for agents
 flowleap patent search --query "CRISPR gene editing" --output json
@@ -67,7 +69,7 @@ Use `--dry-run` to verify the request shape without calling the backend model.
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--model` | AI model for query generation | — |
+| `--focus` | Strategy: `broad`, `precise`, `comprehensive` | `comprehensive` |
 
 #### Examples
 
@@ -75,8 +77,8 @@ Use `--dry-run` to verify the request shape without calling the backend model.
 # Natural language to CQL
 flowleap patent build-query "patents about lithium battery recycling filed by Tesla"
 
-# With specific model
-flowleap patent build-query --model patent-claude-sonnet "renewable energy storage systems"
+# With a strategy focus
+flowleap patent build-query "renewable energy storage systems" --focus comprehensive
 
 # JSON output
 flowleap patent build-query --output json "autonomous vehicle lidar sensors"

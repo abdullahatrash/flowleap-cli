@@ -84,24 +84,24 @@ pub async fn run(ctx: &Context, args: OpsArgs) -> Result<()> {
 }
 
 async fn search(ctx: &Context, cql: &str, start: u32, end: u32) -> Result<()> {
+    // The backend expects a "start-end" range string, not separate fields.
     let body = json!({
         "query": cql,
-        "start": start,
-        "end": end,
+        "range": format!("{}-{}", start, end),
     });
 
     let req = ctx.post("/v1/patent-search", &body);
     let result = ctx.execute_json_body_or_error(req).await?;
 
     let columns = &[
-        ("publicationNumber", "Patent ID"),
+        ("docId", "Patent ID"),
         ("title", "Title"),
-        ("applicant", "Applicant"),
+        ("applicants", "Applicants"),
         ("publicationDate", "Date"),
     ];
 
-    if let Some(results) = result.get("results") {
-        output::print_value(&ctx.output_format, results, columns);
+    if let Some(docs) = result.get("docs") {
+        output::print_value(&ctx.output_format, docs, columns);
     } else {
         output::print_value(&ctx.output_format, &result, columns);
     }
@@ -116,41 +116,62 @@ async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>)
     }
 
     let req = ctx.get(&path);
-    let envelope = ctx.execute_json_allow_error(req).await?;
+    let envelope = ctx.execute_json_envelope(req).await?;
+    if envelope.get("dryRun").and_then(|v| v.as_bool()) == Some(true) {
+        output::print_json(&envelope);
+        return Ok(());
+    }
 
-    // Ops endpoints wrap payloads in a success/data envelope:
-    //   { "success": true,  "data": {...}, "cached": bool, "executionTimeMs": n }
-    //   { "success": false, "error": "...", "code": "NOT_FOUND", "status": 404 }
-    if envelope.get("success") == Some(&Value::Bool(false)) {
-        let code = envelope
+    let http_ok = envelope.get("ok").and_then(|v| v.as_bool()) == Some(true);
+    let body = envelope.get("body").cloned().unwrap_or(Value::Null);
+
+    // Two error shapes reach this command:
+    //   ops routes:  4xx/5xx + { "success": false, "error": "...", "code": "NOT_FOUND", ... }
+    //   middleware:  4xx     + { "error": { "message", "type", "code" } }  (no "success" field!)
+    // HTTP status is authoritative — a body without success:false must not
+    // fall through to the data path.
+    if !http_ok || body.get("success") == Some(&Value::Bool(false)) {
+        let code = body
             .get("code")
             .and_then(|v| v.as_str())
+            .or_else(|| body.pointer("/error/code").and_then(|v| v.as_str()))
             .unwrap_or("ERROR");
-        let message = envelope
+        let message = body
             .get("error")
             .and_then(|v| v.as_str())
+            .or_else(|| body.pointer("/error/message").and_then(|v| v.as_str()))
             .unwrap_or("unknown error");
-        let error = json!({
+        let mut error = json!({
             "ok": false,
             "error": {
                 "code": code,
                 "message": message,
             }
         });
+        // execute_json_envelope already enriched key-related failures.
+        let hint = envelope.get("providerKeysHint").cloned();
+        if let Some(ref hint) = hint {
+            error["providerKeysHint"] = hint.clone();
+        }
         output::print_value(&ctx.output_format, &error, &[]);
+        if ctx.output_format != "json" {
+            if let Some(ref hint) = hint {
+                crate::client::print_keys_hint_box(hint);
+            }
+        }
         return Err(crate::client::PrintedError.into());
     }
 
     if ctx.verbose {
-        if let Some(cached) = envelope.get("cached").and_then(|v| v.as_bool()) {
+        if let Some(cached) = body.get("cached").and_then(|v| v.as_bool()) {
             eprintln!("  cached: {}", cached);
         }
-        if let Some(ms) = envelope.get("executionTimeMs").and_then(|v| v.as_u64()) {
+        if let Some(ms) = body.get("executionTimeMs").and_then(|v| v.as_u64()) {
             eprintln!("  executionTimeMs: {}", ms);
         }
     }
 
-    let data = envelope.get("data").unwrap_or(&envelope);
+    let data = body.get("data").unwrap_or(&body);
     output::print_json(data);
 
     Ok(())

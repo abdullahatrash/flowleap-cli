@@ -22,8 +22,8 @@ You are a startup founder using FlowLeap CLI to validate your IP position and bu
 flowleap patent build-query "AI-powered smart thermostat that learns occupant behavior and optimizes HVAC using reinforcement learning"
 
 # Search for existing patents
-flowleap patent search --query "<generated CQL>" --source epo --limit 20
-flowleap patent search --query "<generated CQL>" --source uspto --limit 20
+flowleap patent search --query "<generated CQL>" --limit 20
+flowleap uspto search --query "<generated CQL>" --limit 20   # USPTO uses ODP Lucene syntax, not CQL
 ```
 
 ### 2. Freedom-to-Operate
@@ -44,8 +44,8 @@ flowleap ops family US10123456
 
 ```bash
 # Search competitor patents
-flowleap patent search --query "pa=Nest AND ti=thermostat" --source epo
-flowleap patent search --query "pa=Ecobee AND ti=thermostat" --source epo
+flowleap patent search --query "pa=Nest AND ti=thermostat"
+flowleap patent search --query "pa=Ecobee AND ti=thermostat"
 ```
 
 ### 4. Deep Dive on Key Patents
