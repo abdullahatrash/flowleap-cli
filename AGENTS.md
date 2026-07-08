@@ -26,7 +26,7 @@ All four must pass before submitting changes.
 | `src/output/formatter.rs` | JSON, table, and human-readable output formatting |
 | `src/commands/auth.rs` | OAuth device flow, personal API tokens (create/list/revoke), status |
 | `src/commands/tools.rs` | Agent-first tool facade: list/describe/run `/v1/tools/*` |
-| `src/commands/skills.rs` | Embedded agent-skill installer (`skills/` baked into binary) |
+| `src/commands/skills.rs` | Embedded agent-skill installer (`skills/` baked into binary): multi-harness targets (claude/claude-project/codex/cursor/gemini/--dir), version stamps, `skills update` |
 | `src/commands/patent.rs` | EPO patent search (CQL) and CQL query builder |
 | `src/commands/uspto.rs` | USPTO ODP search, grants, applications, continuity, query builder |
 | `src/commands/ops.rs` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |

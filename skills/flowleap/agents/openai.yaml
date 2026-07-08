@@ -1,4 +1,0 @@
-interface:
-  display_name: "FlowLeap CLI"
-  short_description: "Use FlowLeap patent backend safely"
-  default_prompt: "Use $flowleap to inspect backend health and run patent research commands safely."
