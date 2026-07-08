@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{error::ErrorKind, Parser, Subcommand};
 use flowleap_cli::commands::{
-    academic, analytics, analyze_claim, api, auth, citation, config_cmd, doctor, health, keys,
-    legal, npl, ocr, ops, patent, skills, tools, uspto,
+    academic, analytics, analyze_claim, api, auth, citation, config_cmd, doctor, facade, health,
+    keys, legal, npl, ocr, ops, patent, skills, tools, uspto,
 };
 use flowleap_cli::{client, config, update};
 use serde_json::json;
@@ -84,6 +84,16 @@ enum Commands {
     Ocr(ocr::OcrArgs),
     /// Analyze a patent claim: keywords, IPC codes, search queries, elements
     AnalyzeClaim(analyze_claim::AnalyzeClaimArgs),
+    /// Compare 2-10 patents side by side (bibliography)
+    Compare(facade::CompareArgs),
+    /// List a patent's drawings/figures; save image data with --out
+    Figures(facade::FiguresArgs),
+    /// One-call patent snapshot: bibliography, legal status, family, term
+    Summary(facade::SummaryArgs),
+    /// Chronological prosecution timeline for a patent
+    Timeline(facade::TimelineArgs),
+    /// Convert a patent number between formats (epodoc, docdb, original)
+    ConvertNumber(facade::ConvertNumberArgs),
     /// Discover and run backend tools (agent-first /v1/tools facade)
     Tools(tools::ToolsArgs),
     /// Install FlowLeap agent skills into an agent's skills directory
@@ -312,6 +322,11 @@ async fn dispatch(command: Commands, ctx: &client::Context) -> Result<()> {
         Commands::Analytics(args) => analytics::run(ctx, args).await,
         Commands::Ocr(args) => ocr::run(ctx, args).await,
         Commands::AnalyzeClaim(args) => analyze_claim::run(ctx, args).await,
+        Commands::Compare(args) => facade::compare(ctx, args).await,
+        Commands::Figures(args) => facade::figures(ctx, args).await,
+        Commands::Summary(args) => facade::summary(ctx, args).await,
+        Commands::Timeline(args) => facade::timeline(ctx, args).await,
+        Commands::ConvertNumber(args) => facade::convert_number(ctx, args).await,
         Commands::Tools(args) => tools::run(ctx, args).await,
         Commands::Skills(args) => skills::run(ctx, args),
         Commands::Config(args) => config_cmd::run(ctx, args).await,

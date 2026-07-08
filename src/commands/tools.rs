@@ -102,6 +102,17 @@ async fn describe(ctx: &Context, name: &str) -> Result<()> {
     }
 }
 
+/// Execute a backend tool through the `/v1/tools/{name}` facade.
+///
+/// Returns the backend's tool envelope (`{ success, tool, data,
+/// executionTimeMs }`), or the dry-run description when `--dry-run` is
+/// active. Shared by `tools run` and the ergonomic verbs (`compare`,
+/// `figures`, `summary`, `timeline`, `convert-number`).
+pub async fn call_tool(ctx: &Context, name: &str, input: &Value) -> Result<Value> {
+    let path = format!("/v1/tools/{}", encode_url_component(name));
+    ctx.execute_json_body_or_error(ctx.post(&path, input)).await
+}
+
 async fn run_tool(
     ctx: &Context,
     name: &str,
@@ -110,10 +121,7 @@ async fn run_tool(
     params: &[String],
 ) -> Result<()> {
     let body = build_input(input, input_file, params)?;
-    let path = format!("/v1/tools/{}", encode_url_component(name));
-    let result = ctx
-        .execute_json_body_or_error(ctx.post(&path, &body))
-        .await?;
+    let result = call_tool(ctx, name, &body).await?;
 
     if result.get("dryRun").and_then(|v| v.as_bool()) == Some(true) {
         output::print_json(&result);
