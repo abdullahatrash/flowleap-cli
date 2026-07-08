@@ -148,18 +148,30 @@ async fn fetch_doc(ctx: &Context, endpoint: &str, doc: &str, lang: Option<&str>)
                 "message": message,
             }
         });
-        // execute_json_envelope already enriched key-related failures.
-        let hint = envelope.get("providerKeysHint").cloned();
-        if let Some(ref hint) = hint {
-            error["providerKeysHint"] = hint.clone();
+        // execute_json_envelope already enriched the failure with structured
+        // hints (provider keys, subscription, rate limit) — carry them over.
+        for key in ["providerKeysHint", "subscriptionHint", "rateLimitHint"] {
+            if let Some(hint) = envelope.get(key) {
+                error[key] = hint.clone();
+            }
         }
         output::print_value(&ctx.output_format, &error, &[]);
         if ctx.output_format != "json" {
-            if let Some(ref hint) = hint {
+            if let Some(hint) = error.get("providerKeysHint") {
                 crate::client::print_keys_hint_box(hint);
             }
+            if let Some(hint) = error.get("subscriptionHint") {
+                crate::client::print_subscription_hint_box(hint);
+            }
+            if let Some(hint) = error.get("rateLimitHint") {
+                crate::client::print_rate_limit_hint_box(hint);
+            }
         }
-        return Err(crate::client::PrintedError.into());
+        return Err(match envelope.get("status").and_then(|v| v.as_u64()) {
+            Some(status) if !http_ok => crate::client::PrintedError::with_status(status as u16),
+            _ => crate::client::PrintedError::new(),
+        }
+        .into());
     }
 
     if ctx.verbose {

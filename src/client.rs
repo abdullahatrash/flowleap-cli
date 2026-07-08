@@ -80,22 +80,26 @@ fn jitter_ms() -> u64 {
 /// reqwest's own Display for a timeout is just "error sending request for url
 /// (…)" — the "operation timed out" lives in the source chain, which the
 /// top-level error renderer never shows. Spell it out so a caller (human or
-/// agent) sees a timeout as a timeout, not a vague send failure.
+/// agent) sees a timeout as a timeout, not a vague send failure. Timeouts and
+/// connection failures come back as [`NetworkError`] so the top-level handler
+/// maps them to the network exit code.
 fn clarify_transport_error(err: reqwest::Error) -> anyhow::Error {
     let url = err
         .url()
         .map(|url| url.as_str().to_string())
         .unwrap_or_default();
     if err.is_timeout() {
-        anyhow::anyhow!(
+        NetworkError::new(format!(
             "Request timed out contacting the FlowLeap backend ({url}). The server did not \
              respond in time; check connectivity or raise FLOWLEAP_TIMEOUT_SECS. ({err})"
-        )
+        ))
+        .into()
     } else if err.is_connect() {
-        anyhow::anyhow!(
+        NetworkError::new(format!(
             "Could not connect to the FlowLeap backend ({url}). Check the base URL and your \
              network. ({err})"
-        )
+        ))
+        .into()
     } else {
         anyhow::Error::new(err)
     }
@@ -115,8 +119,65 @@ fn retry_after_short(resp: &Response) -> Option<Duration> {
     (secs <= RETRY_AFTER_MAX_SECS).then(|| Duration::from_secs(secs))
 }
 
-#[derive(Debug)]
-pub struct PrintedError;
+/// Exit codes for the documented contract (see AGENTS.md "Exit Codes").
+/// 0 = success, 1 = generic failure, 2 = usage/parse error (clap); the rest
+/// map HTTP status classes so agents can branch on `$?` without parsing JSON.
+pub const EXIT_AUTH_REQUIRED: i32 = 3;
+pub const EXIT_SUBSCRIPTION_REQUIRED: i32 = 4;
+pub const EXIT_NOT_FOUND: i32 = 5;
+pub const EXIT_RATE_LIMITED: i32 = 6;
+pub const EXIT_NETWORK: i32 = 7;
+
+/// Map an HTTP status to its documented exit code; anything without a
+/// dedicated code is a generic failure (1).
+pub fn exit_code_for_status(status: u16) -> i32 {
+    match status {
+        401 => EXIT_AUTH_REQUIRED,
+        402 => EXIT_SUBSCRIPTION_REQUIRED,
+        404 => EXIT_NOT_FOUND,
+        429 => EXIT_RATE_LIMITED,
+        _ => 1,
+    }
+}
+
+/// Map a failed run's error to its documented exit code by downcasting the
+/// typed errors this module produces. Anything untyped is generic (1).
+pub fn error_exit_code(err: &anyhow::Error) -> i32 {
+    if let Some(printed) = err.downcast_ref::<PrintedError>() {
+        printed.exit_code()
+    } else if let Some(api) = err.downcast_ref::<ApiError>() {
+        exit_code_for_status(api.status)
+    } else if err.downcast_ref::<NetworkError>().is_some() {
+        EXIT_NETWORK
+    } else {
+        1
+    }
+}
+
+/// An error whose details were already rendered (envelope on stdout, hint
+/// boxes on stderr) — the top-level handler must exit without printing more.
+/// Carries the HTTP status of the failed request, when there was one, so the
+/// handler can map it to the documented exit code.
+#[derive(Debug, Default)]
+pub struct PrintedError {
+    status: Option<u16>,
+}
+
+impl PrintedError {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_status(status: u16) -> Self {
+        Self {
+            status: Some(status),
+        }
+    }
+
+    pub fn exit_code(&self) -> i32 {
+        self.status.map(exit_code_for_status).unwrap_or(1)
+    }
+}
 
 impl std::fmt::Display for PrintedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -125,6 +186,53 @@ impl std::fmt::Display for PrintedError {
 }
 
 impl std::error::Error for PrintedError {}
+
+/// A non-2xx API response on the paths that surface errors as messages rather
+/// than envelopes. Typed so the top-level handler can map the status to the
+/// documented exit code; Display keeps the historical "API error (…)" shape.
+#[derive(Debug)]
+pub struct ApiError {
+    pub status: u16,
+    message: String,
+}
+
+impl ApiError {
+    fn from_response(status: StatusCode, body: &str) -> Self {
+        Self {
+            status: status.as_u16(),
+            message: format!("API error ({}): {}", status, body),
+        }
+    }
+}
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ApiError {}
+
+/// A transport-level failure (request timeout or connection failure) reaching
+/// the backend. Typed so the top-level handler exits with the network code.
+#[derive(Debug)]
+pub struct NetworkError {
+    message: String,
+}
+
+impl NetworkError {
+    fn new(message: String) -> Self {
+        Self { message }
+    }
+}
+
+impl std::fmt::Display for NetworkError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for NetworkError {}
 
 /// Headers that must never appear in verbose or debug output.
 const SECRET_HEADERS: &[&str] = &[
@@ -236,6 +344,106 @@ pub fn print_keys_hint_box(hint: &Value) {
     eprintln!("└{}", "─".repeat(64));
 }
 
+/// The [`PrintedError`] for an already-rendered error envelope, carrying its
+/// HTTP status (when present) for the exit-code mapping.
+fn printed_error_for(envelope: &Value) -> PrintedError {
+    match envelope.get("status").and_then(|value| value.as_u64()) {
+        Some(status) => PrintedError::with_status(status as u16),
+        None => PrintedError::new(),
+    }
+}
+
+/// Fallback upgrade URL when a 402 response body carries none.
+const DEFAULT_UPGRADE_URL: &str = "https://flowleap.co/pricing";
+
+/// Structured, agent-parseable hint for a 402 subscription paywall. The
+/// upgrade URL is taken from the response body when the backend sent one
+/// (top-level or nested under `error`/`detail`), else the pricing page.
+pub fn subscription_hint(body: &Value) -> Value {
+    let upgrade_url = body
+        .get("upgradeUrl")
+        .or_else(|| body.pointer("/error/upgradeUrl"))
+        .or_else(|| body.pointer("/detail/upgradeUrl"))
+        .and_then(|value| value.as_str())
+        .unwrap_or(DEFAULT_UPGRADE_URL);
+    json!({
+        "requiresHumanIntervention": true,
+        "plan": "Basic",
+        "upgradeUrl": upgrade_url,
+        "message": format!(
+            "This command requires an active FlowLeap subscription (Basic plan or higher). \
+             Subscribing happens in a browser, so an agent cannot complete this alone — ask \
+             the user to subscribe at {upgrade_url}, then retry."
+        ),
+    })
+}
+
+/// Structured, agent-parseable hint for a 429 rate limit. Carries the
+/// Retry-After the envelope already captured, when the server sent one.
+pub fn rate_limit_hint(retry_after_seconds: Option<&Value>) -> Value {
+    let mut hint = json!({
+        "message": match retry_after_seconds.and_then(|value| value.as_u64()) {
+            Some(secs) => format!(
+                "Rate limited: the per-user request limit was hit. Wait {secs} seconds, then retry."
+            ),
+            None => "Rate limited: the per-user request limit was hit. Back off before retrying."
+                .to_string(),
+        },
+    });
+    if let Some(secs) = retry_after_seconds {
+        hint["retryAfterSeconds"] = secs.clone();
+    }
+    hint
+}
+
+/// Human-readable info box for the 402 subscription hint, printed to stderr
+/// so it never corrupts parseable stdout.
+pub fn print_subscription_hint_box(hint: &Value) {
+    use colored::Colorize;
+    let title = "FlowLeap subscription required";
+    let plan = hint["plan"].as_str().unwrap_or("Basic");
+    let upgrade_url = hint["upgradeUrl"].as_str().unwrap_or(DEFAULT_UPGRADE_URL);
+
+    eprintln!();
+    eprintln!(
+        "┌─ {} {}",
+        title.yellow().bold(),
+        "─".repeat(50_usize.saturating_sub(title.len()))
+    );
+    eprintln!(
+        "│ This command needs an active FlowLeap subscription ({} plan",
+        plan
+    );
+    eprintln!("│ or higher); the backend answered 402.");
+    eprintln!("│");
+    eprintln!("│ Subscribe: {}", upgrade_url.cyan().bold());
+    eprintln!("│ Then re-run this command.");
+    eprintln!("└{}", "─".repeat(64));
+}
+
+/// Human-readable info box for the 429 rate-limit hint, printed to stderr so
+/// it never corrupts parseable stdout.
+pub fn print_rate_limit_hint_box(hint: &Value) {
+    use colored::Colorize;
+    let title = "Rate limited";
+
+    eprintln!();
+    eprintln!(
+        "┌─ {} {}",
+        title.yellow().bold(),
+        "─".repeat(50_usize.saturating_sub(title.len()))
+    );
+    eprintln!("│ The backend answered 429: the per-user request limit was hit.");
+    match hint["retryAfterSeconds"].as_u64() {
+        Some(secs) => eprintln!(
+            "│ Retry in {} — the server asked for that wait.",
+            format!("{} seconds", secs).cyan().bold()
+        ),
+        None => eprintln!("│ Back off briefly, then retry."),
+    }
+    eprintln!("└{}", "─".repeat(64));
+}
+
 pub fn encode_url_component(value: &str) -> String {
     let mut encoded = String::new();
     for byte in value.bytes() {
@@ -343,7 +551,11 @@ impl Context {
         let mut attempt: u32 = 0;
         loop {
             let Some(this_attempt) = req.try_clone() else {
-                return Ok(self.client().execute(req).await?);
+                return self
+                    .client()
+                    .execute(req)
+                    .await
+                    .map_err(clarify_transport_error);
             };
             let outcome = self.client().execute(this_attempt).await;
 
@@ -446,7 +658,7 @@ impl Context {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            bail!("API error ({}): {}", status, body);
+            return Err(ApiError::from_response(status, &body).into());
         }
 
         Ok(resp)
@@ -473,7 +685,7 @@ impl Context {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            bail!("API error ({}): {}", status, body);
+            return Err(ApiError::from_response(status, &body).into());
         }
 
         let json: Value = resp.json().await?;
@@ -507,7 +719,7 @@ impl Context {
         // Try to parse as JSON; if not JSON and non-2xx, surface as generic error.
         match serde_json::from_str::<Value>(&body) {
             Ok(json) => Ok(json),
-            Err(_) if !status.is_success() => bail!("API error ({}): {}", status, body),
+            Err(_) if !status.is_success() => Err(ApiError::from_response(status, &body).into()),
             Err(e) => bail!("Failed to parse response: {}", e),
         }
     }
@@ -550,11 +762,23 @@ impl Context {
                 .map(|secs| json!(secs))
                 .unwrap_or_else(|_| json!(retry_after));
         }
-        // Provider-key problems get a structured hint so agents know this
-        // needs human intervention rather than a retry.
+        // Structured hints (additive fields only). Provider-key problems and
+        // the subscription paywall need human intervention rather than a
+        // retry; a rate limit needs a precise back-off.
         if !status.is_success() {
             if let Some(hint) = provider_keys_hint(status.as_u16(), &envelope["body"]) {
                 envelope["providerKeysHint"] = hint;
+            }
+            match status.as_u16() {
+                402 => {
+                    let hint = subscription_hint(&envelope["body"]);
+                    envelope["subscriptionHint"] = hint;
+                }
+                429 => {
+                    let hint = rate_limit_hint(envelope.get("retryAfterSeconds"));
+                    envelope["rateLimitHint"] = hint;
+                }
+                _ => {}
             }
         }
         Ok(envelope)
@@ -569,7 +793,7 @@ impl Context {
             return Ok(envelope.get("body").cloned().unwrap_or(Value::Null));
         }
         self.print_error_envelope(&envelope);
-        Err(PrintedError.into())
+        Err(printed_error_for(&envelope).into())
     }
 
     pub async fn execute_json_envelope_or_error(&self, req: RequestBuilder) -> Result<Value> {
@@ -580,16 +804,23 @@ impl Context {
             return Ok(envelope);
         }
         self.print_error_envelope(&envelope);
-        Err(PrintedError.into())
+        Err(printed_error_for(&envelope).into())
     }
 
     /// Print an error envelope; in human/table formats also render the
-    /// provider-keys info box (stderr) when the failure is key-related.
+    /// structured hints (provider keys, subscription, rate limit) as info
+    /// boxes on stderr.
     fn print_error_envelope(&self, envelope: &Value) {
         crate::output::print_value(&self.output_format, envelope, &[]);
         if self.output_format != "json" {
             if let Some(hint) = envelope.get("providerKeysHint") {
                 print_keys_hint_box(hint);
+            }
+            if let Some(hint) = envelope.get("subscriptionHint") {
+                print_subscription_hint_box(hint);
+            }
+            if let Some(hint) = envelope.get("rateLimitHint") {
+                print_rate_limit_hint_box(hint);
             }
         }
     }
@@ -636,5 +867,37 @@ impl Context {
         });
 
         Ok(dry_run)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The full exit-code contract for typed errors (see AGENTS.md).
+    #[test]
+    fn error_exit_codes_map_typed_errors_to_the_contract() {
+        assert_eq!(
+            [401, 402, 404, 429, 400, 403, 500].map(exit_code_for_status),
+            [3, 4, 5, 6, 1, 1, 1]
+        );
+
+        let cases: Vec<(anyhow::Error, i32)> = vec![
+            (PrintedError::with_status(401).into(), 3),
+            (PrintedError::with_status(402).into(), 4),
+            (PrintedError::new().into(), 1),
+            (
+                ApiError::from_response(StatusCode::NOT_FOUND, "nope").into(),
+                5,
+            ),
+            (
+                NetworkError::new("connection refused".to_string()).into(),
+                7,
+            ),
+            (anyhow::anyhow!("anything untyped"), 1),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(error_exit_code(&err), expected, "error: {err}");
+        }
     }
 }
