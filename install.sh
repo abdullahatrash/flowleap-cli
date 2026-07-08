@@ -32,17 +32,51 @@ if [ -z "$LATEST" ]; then
 fi
 
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET_NAME}"
+CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${LATEST}/checksums.txt"
 
 echo "Installing ${BINARY} ${LATEST} (${OS_NAME}/${ARCH_NAME})..."
 
 # Download (show a progress bar on TTY, stay quiet when piped/non-interactive)
 TMPFILE=$(mktemp)
+CHECKSUMS_FILE=$(mktemp)
+trap 'rm -f "$TMPFILE" "$CHECKSUMS_FILE"' EXIT
 if [ -t 2 ]; then
   CURL_PROGRESS="--progress-bar"
 else
   CURL_PROGRESS="-s"
 fi
 curl -fL -S $CURL_PROGRESS "$DOWNLOAD_URL" -o "$TMPFILE"
+
+# Verify sha256 against the release's published checksums.txt
+curl -fsSL "$CHECKSUMS_URL" -o "$CHECKSUMS_FILE"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  ACTUAL=$(sha256sum "$TMPFILE" | awk '{print $1}')
+elif command -v shasum >/dev/null 2>&1; then
+  ACTUAL=$(shasum -a 256 "$TMPFILE" | awk '{print $1}')
+else
+  echo "Error: Neither sha256sum nor shasum found; cannot verify download"
+  exit 1
+fi
+
+# checksums.txt lines look like "<sha256>  <asset-dir>/<asset>" (or just "<asset>").
+EXPECTED=$(awk -v asset="$ASSET_NAME" \
+  '$2 == asset || $2 == asset "/" asset { print $1; exit }' "$CHECKSUMS_FILE")
+
+if [ -z "$EXPECTED" ]; then
+  echo "Error: No checksum entry for ${ASSET_NAME} in checksums.txt"
+  exit 1
+fi
+
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "Error: sha256 mismatch for ${ASSET_NAME}"
+  echo "  expected: $EXPECTED"
+  echo "  actual:   $ACTUAL"
+  echo "Refusing to install."
+  exit 1
+fi
+
+echo "sha256 verified."
 chmod +x "$TMPFILE"
 
 # Install
