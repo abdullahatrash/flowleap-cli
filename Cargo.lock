@@ -305,6 +305,7 @@ name = "flowleap-cli"
 version = "0.2.5"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "colored",
  "comfy-table",

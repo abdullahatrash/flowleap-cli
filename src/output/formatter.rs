@@ -107,7 +107,7 @@ fn print_object_human(obj: &Value, columns: &[(&str, &str)]) {
 /// when truncation occurs. Unicode-safe: counts by `char`, never slices on a
 /// byte boundary mid-codepoint. For `max <= 3`, returns the first `max` chars
 /// without an ellipsis since "..." alone wouldn't fit.
-fn truncate(s: &str, max: usize) -> String {
+pub fn truncate(s: &str, max: usize) -> String {
     if max == 0 {
         return String::new();
     }

@@ -4,6 +4,7 @@ pub mod auth;
 pub mod citation;
 pub mod config_cmd;
 pub mod doctor;
+pub mod facade;
 pub mod health;
 pub mod keys;
 pub mod legal;

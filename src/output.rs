@@ -1,3 +1,3 @@
 mod formatter;
 
-pub use formatter::{print_json, print_value};
+pub use formatter::{print_json, print_value, truncate};
