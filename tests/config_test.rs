@@ -52,6 +52,41 @@ fn test_config_toml_empty() {
     assert_eq!(config.base_url, "https://api.flowleap.co");
     assert!(config.default_model.is_none());
     assert!(config.output_format.is_none());
+    assert!(config.skill_installs.is_empty());
+}
+
+/// Recorded skill installs survive a TOML roundtrip, and configs written
+/// before the field existed still parse (serde default).
+#[test]
+fn test_config_skill_installs_roundtrip() {
+    let toml_content = r#"
+base_url = "https://api.flowleap.co"
+
+[[skill_installs]]
+target = "codex"
+path = "/work/project/AGENTS.md"
+version = "0.2.5"
+
+[[skill_installs]]
+target = "dir"
+path = "/work/agent-skills"
+version = "0.2.4"
+skills = ["flowleap", "flowleap-patent"]
+"#;
+
+    let config: Config = toml::from_str(toml_content).unwrap();
+    assert_eq!(config.skill_installs.len(), 2);
+    assert_eq!(config.skill_installs[0].target, "codex");
+    assert_eq!(config.skill_installs[0].version, "0.2.5");
+    assert!(config.skill_installs[0].skills.is_empty());
+    assert_eq!(
+        config.skill_installs[1].skills,
+        vec!["flowleap".to_string(), "flowleap-patent".to_string()]
+    );
+
+    let serialized = toml::to_string_pretty(&config).unwrap();
+    let deserialized: Config = toml::from_str(&serialized).unwrap();
+    assert_eq!(deserialized.skill_installs, config.skill_installs);
 }
 
 /// Test credentials TOML roundtrip against the real Credentials type
@@ -147,6 +182,7 @@ fn test_config_file_persistence() {
         base_url: "https://test.example.com".to_string(),
         default_model: Some("gpt-4".to_string()),
         output_format: Some("table".to_string()),
+        ..Default::default()
     };
 
     let contents = toml::to_string_pretty(&config).unwrap();

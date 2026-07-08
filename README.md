@@ -184,7 +184,28 @@ CLI flags > environment variables > config file
 
 ## AI Agent Integration
 
-The repo ships Agent Skills (`SKILL.md` files) — one for every CLI command, plus personas and multi-step recipes. Skills are structured Markdown files that any LLM can read natively.
+The repo ships Agent Skills (`SKILL.md` files) — one for every CLI command, plus personas and multi-step recipes. Skills are structured Markdown files that any LLM can read natively. They are baked into the binary, so `flowleap skills install` works anywhere.
+
+### Installing Skills Per Harness
+
+```bash
+flowleap skills install                    # Claude Code (user): ~/.claude/skills
+flowleap skills install --target claude-project   # Claude Code (project): ./.claude/skills
+flowleap skills install --target codex     # Codex: marked block in ./AGENTS.md
+flowleap skills install --target cursor    # Cursor: ./.cursor/rules/flowleap.mdc
+flowleap skills install --target gemini    # Gemini CLI: marked block in ./GEMINI.md
+flowleap skills install --dir <path>       # Raw SKILL.md copy anywhere
+```
+
+Claude targets copy the full SKILL.md directories; the other targets render a condensed agent-rules document (command reference + workflow triggers) generated from the same embedded skill content — the file each harness actually auto-loads.
+
+Every install is stamped with the CLI version and recorded in the config file. After upgrading the CLI, refresh all recorded installs in one go:
+
+```bash
+flowleap skills update
+```
+
+The daily update notice also warns when installed skills are stale (rendered by an older CLI version).
 
 ### Skill Categories
 

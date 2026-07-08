@@ -10,6 +10,10 @@ pub struct Config {
     pub base_url: String,
     pub default_model: Option<String>,
     pub output_format: Option<String>,
+    /// Destinations `flowleap skills install` has written to, so
+    /// `flowleap skills update` can refresh them after a CLI upgrade.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skill_installs: Vec<SkillInstall>,
 }
 
 impl Default for Config {
@@ -18,8 +22,23 @@ impl Default for Config {
             base_url: default_base_url(),
             default_model: None,
             output_format: None,
+            skill_installs: Vec::new(),
         }
     }
+}
+
+/// One recorded `skills install` destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillInstall {
+    /// Harness target: claude, claude-project, dir, codex, cursor, or gemini.
+    pub target: String,
+    /// Skills directory for copy targets; the rendered file otherwise.
+    pub path: PathBuf,
+    /// CLI version that produced the installed output.
+    pub version: String,
+    /// Skills selected at install time (empty = all bundled skills).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<String>,
 }
 
 /// Credentials stored separately in ~/.config/flowleap/credentials.toml

@@ -103,7 +103,7 @@ async fn check(http: reqwest::Client) -> Option<String> {
 
     // Inside the daily window: answer from the cached state, no network.
     if now.saturating_sub(state.last_checked_unix) < CHECK_INTERVAL_SECS {
-        return notice(&state.latest, current);
+        return with_skills_staleness(notice(&state.latest, current), current);
     }
 
     let resp = http
@@ -116,7 +116,24 @@ async fn check(http: reqwest::Client) -> Option<String> {
     state.latest = body.get("version")?.as_str()?.to_string();
     state.last_checked_unix = now;
     save_state(&state);
-    notice(&state.latest, current)
+    with_skills_staleness(notice(&state.latest, current), current)
+}
+
+/// Seam for the skills installer: append its stale-skills line (recorded
+/// install stamp older than the running binary) to the update notice. Kept
+/// as one small hook so concurrent edits to this file merge cleanly.
+fn with_skills_staleness(update_notice: Option<String>, current: &str) -> Option<String> {
+    let stale = crate::commands::skills::stale_skills_notice(current);
+    if update_notice.is_none() && stale.is_none() {
+        return None;
+    }
+    Some(
+        update_notice
+            .into_iter()
+            .chain(stale)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 #[cfg(test)]
