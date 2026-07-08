@@ -237,7 +237,7 @@ async fn set(
                 eprintln!("{}", verdict_line(provider_name, &verdict));
                 eprintln!("Keys NOT saved. Fix them and retry, or use --no-verify to save anyway.");
             }
-            return Err(crate::client::PrintedError.into());
+            return Err(crate::client::PrintedError::new().into());
         }
     }
 
@@ -353,7 +353,7 @@ async fn test(ctx: &Context) -> Result<()> {
         println!("{}", verdict_line("uspto", &verdicts["uspto"]));
     }
     if !healthy {
-        return Err(crate::client::PrintedError.into());
+        return Err(crate::client::PrintedError::new().into());
     }
     Ok(())
 }

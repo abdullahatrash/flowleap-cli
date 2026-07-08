@@ -132,11 +132,12 @@ async fn main() {
     let wants_json = cli.json || cli.output.as_deref() == Some("json");
 
     if let Err(err) = run(cli).await {
-        if err
-            .downcast_ref::<flowleap_cli::client::PrintedError>()
-            .is_some()
-        {
-            std::process::exit(1);
+        // Documented exit-code contract (see AGENTS.md "Exit Codes"): typed
+        // errors carry the failed request's status class; anything else is 1.
+        let code = client::error_exit_code(&err);
+        if err.downcast_ref::<client::PrintedError>().is_some() {
+            // Already rendered (envelope + hint boxes) — just exit.
+            std::process::exit(code);
         }
         if wants_json {
             println!(
@@ -152,7 +153,7 @@ async fn main() {
         } else {
             eprintln!("Error: {err}");
         }
-        std::process::exit(1);
+        std::process::exit(code);
     }
 }
 

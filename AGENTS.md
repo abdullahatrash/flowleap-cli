@@ -93,6 +93,36 @@ the JSON error envelope carries a `providerKeysHint` object with
 hint and ask the user to run `flowleap setup` (or provide keys via env/flags).
 Human/table output renders the same hint as an info box on stderr.
 
+## Exit Codes & Structured Hints (agent integration)
+
+Every run exits with a documented code, so agents can branch on `$?` without
+parsing JSON:
+
+| Code | Meaning | Trigger |
+|------|---------|---------|
+| 0 | Success | |
+| 1 | Generic failure | Any error without a dedicated code (config, response parsing, other 4xx/5xx) |
+| 2 | Usage error | clap argument/flag parse failure |
+| 3 | Auth required | HTTP 401 — run `flowleap auth login` or set `FLOWLEAP_API_KEY` / `FLOWLEAP_TOKEN` |
+| 4 | Subscription required | HTTP 402 — a human must subscribe; see `subscriptionHint` |
+| 5 | Not found | HTTP 404 |
+| 6 | Rate limited | HTTP 429 — back off, then retry; see `rateLimitHint` |
+| 7 | Network failure | Connection failure or request timeout reaching the backend |
+
+On failure the JSON error envelope may carry structured hints — **additive**
+fields only, so existing envelope consumers are unaffected. Human/table output
+renders each hint as an info box on stderr:
+
+- `providerKeysHint` — missing/rejected EPO or USPTO keys (see Provider Keys
+  above). Needs a human; do not retry.
+- `subscriptionHint` (402) — `{ requiresHumanIntervention: true, plan:
+  "Basic", upgradeUrl, message }`. The upgrade URL comes from the response
+  body when present, else `https://flowleap.co/pricing`. Subscribing happens
+  in a browser — surface the URL to the user; do not retry.
+- `rateLimitHint` (429) — `{ retryAfterSeconds?, message }`. When
+  `retryAfterSeconds` is present (from the `Retry-After` header, also surfaced
+  top-level on the envelope), wait exactly that long before retrying.
+
 ## API Endpoints
 
 The `/v1/tools/*` facade is the preferred agent surface: `flowleap tools list`
