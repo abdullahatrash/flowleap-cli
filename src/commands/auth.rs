@@ -218,7 +218,10 @@ pub async fn device_flow_login(ctx: &Context) -> Result<String> {
 
     let base_url = ctx.config.base_url.trim_end_matches('/');
 
-    let client = reqwest::Client::new();
+    // Reuse the shared, configured client (timeouts + versioned User-Agent)
+    // rather than constructing an unconfigured one. The device endpoints are
+    // unauthenticated, so no auth injection is needed here.
+    let client = &ctx.http;
     let resp = client
         .post(format!("{}/oauth/device", base_url))
         .json(&serde_json::json!({"client_id": "flowleap-cli"}))

@@ -1,8 +1,119 @@
+use std::time::Duration;
+
 use anyhow::{bail, Result};
-use reqwest::{Client, Method, Request, RequestBuilder, Response};
+use reqwest::{Client, Method, Request, RequestBuilder, Response, StatusCode};
 use serde_json::{json, Value};
 
 use crate::config::{Config, Credentials};
+
+/// Versioned User-Agent sent on every request so the backend can version-gate
+/// and debug client issues.
+const USER_AGENT: &str = concat!("flowleap-cli/", env!("CARGO_PKG_VERSION"));
+
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 5;
+/// Retries beyond the first attempt for transient failures on read-only calls.
+const DEFAULT_MAX_RETRIES: u32 = 2;
+/// A 429 is only retried in-band when the server asks us to wait at most this
+/// long; longer waits pass through to the envelope so the caller decides.
+const RETRY_AFTER_MAX_SECS: u64 = 5;
+
+/// Build the one shared HTTP client every command uses. Applies a bounded
+/// request/connect timeout (so a hung backend can never block a caller forever)
+/// and the versioned User-Agent. Both timeouts are overridable via env for
+/// slow-network or CI use; a non-positive or unparseable value falls back to the
+/// default rather than disabling the timeout.
+pub fn build_http_client() -> Client {
+    let timeout = env_secs("FLOWLEAP_TIMEOUT_SECS", DEFAULT_TIMEOUT_SECS);
+    let connect = env_secs(
+        "FLOWLEAP_CONNECT_TIMEOUT_SECS",
+        DEFAULT_CONNECT_TIMEOUT_SECS,
+    );
+    Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(Duration::from_secs(timeout))
+        .connect_timeout(Duration::from_secs(connect))
+        .build()
+        .unwrap_or_else(|_| Client::new())
+}
+
+/// Read a positive whole-seconds value from `name`, falling back to `default`
+/// for anything missing, unparseable, or non-positive (never disables a timeout).
+fn env_secs(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|&secs| secs > 0)
+        .unwrap_or(default)
+}
+
+fn max_retries() -> u32 {
+    std::env::var("FLOWLEAP_MAX_RETRIES")
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(DEFAULT_MAX_RETRIES)
+}
+
+/// Only connection-level failures (refused/reset/unreachable/DNS) are retried.
+/// A request timeout means a stalled server and surfaces immediately as a clear
+/// error rather than being multiplied into a longer hang.
+fn is_retryable_transport(err: &reqwest::Error) -> bool {
+    err.is_connect()
+}
+
+/// Exponential backoff (250ms, 500ms, …) plus a little jitter, derived from the
+/// clock so we avoid pulling in an RNG dependency.
+fn backoff(attempt: u32) -> Duration {
+    let base = 250u64.saturating_mul(1u64 << attempt.min(6));
+    Duration::from_millis(base + jitter_ms())
+}
+
+fn jitter_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| (elapsed.subsec_nanos() % 128) as u64)
+        .unwrap_or(0)
+}
+
+/// Turn a low-level transport failure into a clear, actionable message.
+/// reqwest's own Display for a timeout is just "error sending request for url
+/// (…)" — the "operation timed out" lives in the source chain, which the
+/// top-level error renderer never shows. Spell it out so a caller (human or
+/// agent) sees a timeout as a timeout, not a vague send failure.
+fn clarify_transport_error(err: reqwest::Error) -> anyhow::Error {
+    let url = err
+        .url()
+        .map(|url| url.as_str().to_string())
+        .unwrap_or_default();
+    if err.is_timeout() {
+        anyhow::anyhow!(
+            "Request timed out contacting the FlowLeap backend ({url}). The server did not \
+             respond in time; check connectivity or raise FLOWLEAP_TIMEOUT_SECS. ({err})"
+        )
+    } else if err.is_connect() {
+        anyhow::anyhow!(
+            "Could not connect to the FlowLeap backend ({url}). Check the base URL and your \
+             network. ({err})"
+        )
+    } else {
+        anyhow::Error::new(err)
+    }
+}
+
+/// The short, bounded delay a 429 asks us to wait, if any. `None` when there is
+/// no Retry-After, it is unparseable, or it exceeds `RETRY_AFTER_MAX_SECS`.
+fn retry_after_short(resp: &Response) -> Option<Duration> {
+    let secs = resp
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()?;
+    (secs <= RETRY_AFTER_MAX_SECS).then(|| Duration::from_secs(secs))
+}
 
 #[derive(Debug)]
 pub struct PrintedError;
@@ -221,6 +332,49 @@ impl Context {
         self.credentials.api_key.as_deref()
     }
 
+    /// Execute a request with bounded, jittered retry on transient failures.
+    /// Every FlowLeap endpoint the CLI calls is read-only or idempotent, so a
+    /// resend is safe. Retries: 5xx (server transient), connection-level errors
+    /// (refused/reset/unreachable), and a 429 whose Retry-After is short. A
+    /// request timeout and any 4xx are never retried. A non-cloneable body
+    /// (streaming) is attempted exactly once.
+    async fn send_retrying(&self, req: Request) -> Result<Response> {
+        let max = max_retries();
+        let mut attempt: u32 = 0;
+        loop {
+            let Some(this_attempt) = req.try_clone() else {
+                return Ok(self.client().execute(req).await?);
+            };
+            let outcome = self.client().execute(this_attempt).await;
+
+            let wait = match &outcome {
+                Ok(resp) if resp.status() == StatusCode::TOO_MANY_REQUESTS => {
+                    retry_after_short(resp)
+                }
+                Ok(resp) if resp.status().is_server_error() => Some(backoff(attempt)),
+                Ok(_) => None,
+                Err(err) if is_retryable_transport(err) => Some(backoff(attempt)),
+                Err(_) => None,
+            };
+
+            match wait {
+                Some(delay) if attempt < max => {
+                    if self.verbose {
+                        eprintln!(
+                            "  transient failure — retry {}/{} in {}ms",
+                            attempt + 1,
+                            max,
+                            delay.as_millis()
+                        );
+                    }
+                    tokio::time::sleep(delay).await;
+                    attempt += 1;
+                }
+                _ => return outcome.map_err(clarify_transport_error),
+            }
+        }
+    }
+
     /// Send a request; on 401 with a stored session token, retry once with
     /// the stored API key. A Clerk session token expires quickly and would
     /// otherwise shadow a still-valid fl_pat_ key (see auth_header precedence).
@@ -239,7 +393,7 @@ impl Context {
             _ => None,
         };
 
-        let resp = self.client().execute(req).await?;
+        let resp = self.send_retrying(req).await?;
         if resp.status() != reqwest::StatusCode::UNAUTHORIZED {
             return Ok(resp);
         }
@@ -248,7 +402,7 @@ impl Context {
         if self.verbose {
             eprintln!("  401 with session token — retrying with stored API key");
         }
-        let retry_resp = self.client().execute(retry).await?;
+        let retry_resp = self.send_retrying(retry).await?;
         if retry_resp.status().is_success() {
             eprintln!(
                 "warning: the stored session token was rejected (401); the request succeeded with the stored API key. \
