@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{error::ErrorKind, Parser, Subcommand};
 use flowleap_cli::commands::{
-    academic, analytics, api, auth, citation, config_cmd, doctor, health, keys, legal, npl, ops,
-    patent, skills, tools, uspto,
+    academic, analytics, analyze_claim, api, auth, citation, config_cmd, doctor, health, keys,
+    legal, npl, ocr, ops, patent, skills, tools, uspto,
 };
 use flowleap_cli::{client, config, update};
 use serde_json::json;
@@ -80,6 +80,10 @@ enum Commands {
     Citation(citation::CitationArgs),
     /// Full-corpus patent analytics (filing trends, countries, assignees, CPC)
     Analytics(analytics::AnalyticsArgs),
+    /// Extract text from a PDF, image, or document via OCR (file or URL)
+    Ocr(ocr::OcrArgs),
+    /// Analyze a patent claim: keywords, IPC codes, search queries, elements
+    AnalyzeClaim(analyze_claim::AnalyzeClaimArgs),
     /// Discover and run backend tools (agent-first /v1/tools facade)
     Tools(tools::ToolsArgs),
     /// Install FlowLeap agent skills into an agent's skills directory
@@ -306,6 +310,8 @@ async fn dispatch(command: Commands, ctx: &client::Context) -> Result<()> {
         Commands::Legal(args) => legal::run(ctx, args).await,
         Commands::Citation(args) => citation::run(ctx, args).await,
         Commands::Analytics(args) => analytics::run(ctx, args).await,
+        Commands::Ocr(args) => ocr::run(ctx, args).await,
+        Commands::AnalyzeClaim(args) => analyze_claim::run(ctx, args).await,
         Commands::Tools(args) => tools::run(ctx, args).await,
         Commands::Skills(args) => skills::run(ctx, args),
         Commands::Config(args) => config_cmd::run(ctx, args).await,

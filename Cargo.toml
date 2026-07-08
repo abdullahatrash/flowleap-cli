@@ -44,6 +44,9 @@ open = "5"
 # Embedded agent skills (skills/ directory baked into the binary)
 include_dir = "0.7"
 
+# Base64 file encoding for the OCR upload body
+base64 = "0.22"
+
 
 [dev-dependencies]
 tempfile = "3"
