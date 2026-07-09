@@ -276,6 +276,7 @@ fn test_auth_fallback_key_gating() {
         dry_run: false,
         verbose: false,
         token_overridden: overridden,
+        assume_yes: false,
         http: reqwest::Client::new(),
     };
 

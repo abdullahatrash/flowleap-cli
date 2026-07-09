@@ -3,3 +3,4 @@ pub mod commands;
 pub mod config;
 pub mod output;
 pub mod update;
+pub mod url_guard;

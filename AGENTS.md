@@ -177,6 +177,13 @@ Error `code` values: `MISSING_PARAM` (400), `NOT_FOUND` (404), `RATE_LIMITED` (4
 - Never output stored credentials (API keys, tokens) in logs or verbose mode
 - Use `--dry-run` for safety when testing mutating operations
 - Authorization header is stripped from verbose output
+- Base-URL credential guard: when the effective base URL's host is not
+  `flowleap.co`/`*.flowleap.co`/`localhost`/`127.0.0.1`/`::1`, the CLI prints
+  one stderr warning per invocation naming the host and the credential kinds
+  that will be sent (presence only, never values). In an interactive terminal
+  it requires y/N confirmation before the first request; `--yes` (or
+  `FLOWLEAP_ASSUME_YES=1`) skips the prompt. Non-TTY, `--json`, and `--dry-run`
+  runs warn and proceed, so agents are never blocked and stdout stays clean.
 
 ## Skills
 
@@ -193,6 +200,7 @@ The `skills/` directory contains SKILL.md files for AI agent consumption. Each s
 | `FLOWLEAP_API_KEY` | API key for authentication |
 | `FLOWLEAP_TOKEN` | Bearer token for authentication |
 | `FLOWLEAP_BASE_URL` | API base URL override |
+| `FLOWLEAP_ASSUME_YES` | Skip confirmation prompts (same as `--yes`) |
 
 
 ## Testing
