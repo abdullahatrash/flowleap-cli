@@ -46,6 +46,12 @@ Two integration paths, both embedded in the binary — no network needed to inst
 
 Authenticate once before wiring either path (`flowleap auth login`, or set `FLOWLEAP_API_KEY` for headless use). An unauthenticated MCP server still starts, but every tool call returns an error explaining how to log in.
 
+Verify readiness any time with the one-command diagnostic — it checks backend reachability, auth, provider keys, and the live tool count, and exits nonzero with fix instructions when something is missing:
+
+```bash
+flowleap mcp --check
+```
+
 ### Claude Code
 
 ```bash

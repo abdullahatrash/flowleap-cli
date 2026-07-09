@@ -58,9 +58,17 @@ tool call returns an error explaining how to log in).";
 /// one frame per line, on stdin/stdout.
 #[derive(Parser)]
 #[command(after_long_help = HARNESS_WIRING_HELP)]
-pub struct McpArgs {}
+pub struct McpArgs {
+    /// Print readiness diagnostics (backend, auth, provider keys, tool count)
+    /// and exit instead of serving — the one-command onboarding check.
+    #[arg(long)]
+    pub check: bool,
+}
 
-pub async fn run(ctx: &Context, _args: McpArgs) -> Result<()> {
+pub async fn run(ctx: &Context, args: McpArgs) -> Result<()> {
+    if args.check {
+        return run_check(ctx).await;
+    }
     // stdout carries protocol frames only; everything human goes to stderr.
     eprintln!(
         "flowleap mcp v{}: serving MCP over stdio (backend: {})",
@@ -87,6 +95,103 @@ pub async fn run(ctx: &Context, _args: McpArgs) -> Result<()> {
         frame.push('\n');
         stdout.write_all(frame.as_bytes()).await?;
         stdout.flush().await?;
+    }
+    Ok(())
+}
+
+/// `flowleap mcp --check` — readiness diagnostics for harness onboarding.
+/// This is NOT protocol mode: results go to stdout (JSON when requested),
+/// remediation hints to stderr, and the exit code reflects readiness.
+async fn run_check(ctx: &Context) -> Result<()> {
+    let wants_json = ctx.output_format == "json";
+
+    // 1. Backend reachability (no auth required).
+    let backend_ok = ctx
+        .http
+        .get(format!("{}/health", ctx.config.base_url))
+        .send()
+        .await
+        .map(|resp| resp.status().is_success())
+        .unwrap_or(false);
+
+    // 2. Stored/ambient FlowLeap auth.
+    let auth_kind = if ctx.credentials.token.is_some() {
+        Some("session token")
+    } else if ctx.credentials.api_key.is_some() {
+        Some("personal token / API key")
+    } else {
+        None
+    };
+
+    // 3. Provider keys (presence only — never values).
+    let epo_ok = ctx.credentials.epo_key.is_some() && ctx.credentials.epo_secret.is_some();
+    let uspto_ok = ctx.credentials.uspto_key.is_some();
+
+    // 4. Live tool list — also proves the auth actually works.
+    let tool_count = if auth_kind.is_some() && backend_ok {
+        match tools::fetch_tools_envelope(ctx).await {
+            Ok(envelope) => envelope
+                .get("body")
+                .and_then(|body| body.get("tools"))
+                .and_then(Value::as_array)
+                .map(|tools| tools.len()),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    let ready = backend_ok && auth_kind.is_some() && tool_count.is_some();
+
+    if wants_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "ready": ready,
+                "backend": { "url": ctx.config.base_url, "reachable": backend_ok },
+                "auth": { "configured": auth_kind.is_some(), "kind": auth_kind, "verified": tool_count.is_some() },
+                "providerKeys": { "epoOps": epo_ok, "usptoOdp": uspto_ok },
+                "toolCount": tool_count,
+            }))?
+        );
+    } else {
+        let mark = |ok: bool| if ok { "ok " } else { "MISSING" };
+        println!("flowleap mcp readiness check");
+        println!("  backend   {}  {}", mark(backend_ok), ctx.config.base_url);
+        println!(
+            "  auth      {}  {}",
+            mark(auth_kind.is_some() && tool_count.is_some()),
+            auth_kind.unwrap_or("no credentials stored")
+        );
+        println!(
+            "  epo ops   {}  (optional: unlocks EPO-gated data)",
+            mark(epo_ok)
+        );
+        println!(
+            "  uspto odp {}  (optional: unlocks USPTO-gated data)",
+            mark(uspto_ok)
+        );
+        match tool_count {
+            Some(count) => println!("  tools     ok   {count} tools served over MCP"),
+            None => println!("  tools     n/a  (needs backend + working auth)"),
+        }
+    }
+
+    if !ready {
+        if auth_kind.is_none() {
+            eprintln!(
+                "fix: run 'flowleap auth login' (or set FLOWLEAP_TOKEN in the MCP config env)"
+            );
+        } else if backend_ok && tool_count.is_none() {
+            eprintln!("fix: credentials present but rejected — re-run 'flowleap auth login'");
+        }
+        if !backend_ok {
+            eprintln!("fix: backend unreachable — check network or base URL ('flowleap doctor')");
+        }
+        anyhow::bail!("mcp is not ready to serve");
+    }
+    if !epo_ok || !uspto_ok {
+        eprintln!("note: provider keys are optional; add via 'flowleap keys set' to unlock provider-gated data");
     }
     Ok(())
 }

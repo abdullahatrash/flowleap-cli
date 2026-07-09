@@ -355,3 +355,69 @@ async fn unauthenticated_server_starts_and_gates_tools_with_login_help() {
         "call error must point at auth login: {call_text}"
     );
 }
+
+#[tokio::test]
+async fn mcp_check_reports_ready_with_auth_and_backend() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/health"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "status": "ok" })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/tools"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "tools": mock_tools() })))
+        .mount(&server)
+        .await;
+
+    let temp_home = tempfile::tempdir().expect("create temp home");
+    let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
+        .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env("FLOWLEAP_BASE_URL", server.uri())
+        .env("FLOWLEAP_API_KEY", "fl_pat_test_key")
+        .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
+        .env_remove("FLOWLEAP_TOKEN")
+        .args(["--json", "mcp", "--check"])
+        .output()
+        .expect("run mcp --check");
+
+    assert!(output.status.success(), "expected ready exit 0");
+    let value: Value = serde_json::from_slice(&output.stdout).expect("check output is json");
+    assert_eq!(value["ready"], true);
+    assert_eq!(value["backend"]["reachable"], true);
+    assert_eq!(value["auth"]["configured"], true);
+    assert_eq!(
+        value["toolCount"],
+        mock_tools().as_array().map(|t| t.len()).unwrap_or(0)
+    );
+}
+
+#[tokio::test]
+async fn mcp_check_fails_without_credentials() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/health"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "status": "ok" })))
+        .mount(&server)
+        .await;
+
+    let temp_home = tempfile::tempdir().expect("create temp home");
+    let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
+        .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env("FLOWLEAP_BASE_URL", server.uri())
+        .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
+        .env_remove("FLOWLEAP_API_KEY")
+        .env_remove("FLOWLEAP_TOKEN")
+        .args(["mcp", "--check"])
+        .output()
+        .expect("run mcp --check unauthenticated");
+
+    assert!(!output.status.success(), "expected not-ready nonzero exit");
+    let stderr = String::from_utf8(output.stderr).expect("stderr utf8");
+    assert!(
+        stderr.contains("flowleap auth login"),
+        "stderr guides to login: {stderr}"
+    );
+}
