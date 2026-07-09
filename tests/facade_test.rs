@@ -12,6 +12,8 @@ fn dry_run(temp_home: &tempfile::TempDir, args: &[&str]) -> serde_json::Value {
 
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args(&full_args)

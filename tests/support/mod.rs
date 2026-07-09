@@ -32,6 +32,7 @@ pub async fn run_cli(base_url: &str, envs: &[(&str, &str)], args: &[&str]) -> Ou
         let home = tempfile::tempdir().expect("create temp home");
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_flowleap"));
         cmd.env("HOME", home.path())
+            .env("XDG_CONFIG_HOME", home.path().join(".config"))
             .env("FLOWLEAP_BASE_URL", &base_url)
             .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
             .env_remove("FLOWLEAP_TOKEN")

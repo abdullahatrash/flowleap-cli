@@ -26,6 +26,8 @@ impl Sandbox {
         Command::new(env!("CARGO_BIN_EXE_flowleap"))
             .current_dir(self.cwd.path())
             .env("HOME", self.home.path())
+            .env("XDG_CONFIG_HOME", self.home.path().join(".config"))
+            .env_remove("FLOWLEAP_BASE_URL")
             .env("XDG_CONFIG_HOME", self.home.path().join("xdg"))
             .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
             .env_remove("FLOWLEAP_API_KEY")

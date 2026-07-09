@@ -27,6 +27,8 @@ async fn run_mcp(base_url: &str, envs: &[(&str, &str)], lines: &[String]) -> Vec
         let home = tempfile::tempdir().expect("create temp home");
         let mut child = Command::new(env!("CARGO_BIN_EXE_flowleap"))
             .env("HOME", home.path())
+            .env("XDG_CONFIG_HOME", home.path().join(".config"))
+            .env_remove("FLOWLEAP_BASE_URL")
             .env("FLOWLEAP_BASE_URL", &base_url)
             .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
             .env_remove("FLOWLEAP_TOKEN")

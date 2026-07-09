@@ -20,6 +20,8 @@ fn dry_run_succeeds_without_credentials() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -59,6 +61,8 @@ fn uspto_search_dry_run_uses_odp_request_shape() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env("FLOWLEAP_API_KEY", "fl_org_test_secret")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -124,6 +128,8 @@ fn raw_request_dry_run_succeeds_without_credentials() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -155,6 +161,8 @@ fn org_api_key_dry_run_is_authenticated_without_leaking_key() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env("FLOWLEAP_API_KEY", "fl_org_test_secret")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -227,6 +235,8 @@ fn analytics_dry_run_uses_structured_request_shape() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -288,6 +298,8 @@ fn analytics_dry_run_omits_absent_criteria() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args(["--json", "analytics", "--keyword", "battery", "--dry-run"])
@@ -310,6 +322,8 @@ fn analytics_rejects_missing_criteria_locally_in_json_mode() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         // An unroutable base URL proves the rejection happens before any
@@ -335,6 +349,8 @@ fn analytics_rejects_missing_criteria_locally_in_human_mode() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
@@ -409,6 +425,8 @@ fn analytics_human_mode_renders_four_labeled_tables() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env("FLOWLEAP_API_KEY", "fl_pat_test_key")
         .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
         .env_remove("FLOWLEAP_TOKEN")
@@ -446,6 +464,8 @@ fn analytics_json_mode_emits_endpoint_envelope_untouched() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env("FLOWLEAP_API_KEY", "fl_pat_test_key")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -483,6 +503,8 @@ fn init_honors_json_flag() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .args(["--json", "init", "--base-url", "http://localhost:8000"])
         .output()
         .expect("run json init");
@@ -501,6 +523,8 @@ fn ocr_url_dry_run_sends_url_field() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args(["--json", "ocr", "https://example.com/spec.pdf", "--dry-run"])
@@ -528,6 +552,8 @@ fn ocr_local_file_dry_run_sends_base64_and_filename() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -561,6 +587,8 @@ fn ocr_rejects_unsupported_file_type_locally() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .args([
             "--json",
             "ocr",
@@ -586,6 +614,8 @@ fn ocr_rejects_missing_file_locally() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .args(["--json", "ocr", "/nonexistent/never.pdf", "--dry-run"])
         .output()
         .expect("run ocr missing-file");
@@ -612,6 +642,8 @@ fn ocr_rejects_oversized_file_locally() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .args([
             "--json",
             "ocr",
@@ -638,6 +670,8 @@ fn analyze_claim_argument_dry_run_request_shape() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .env_remove("FLOWLEAP_API_KEY")
         .env_remove("FLOWLEAP_TOKEN")
         .args([
@@ -669,6 +703,8 @@ fn analyze_claim_forwards_focus_flag() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .args([
             "--json",
             "analyze-claim",
@@ -697,6 +733,8 @@ fn analyze_claim_reads_file_input() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .args([
             "--json",
             "analyze-claim",
@@ -724,6 +762,8 @@ fn analyze_claim_reads_stdin_when_no_arg_or_file() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let mut child = Command::new(env!("CARGO_BIN_EXE_flowleap"))
         .env("HOME", temp_home.path())
+        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+        .env_remove("FLOWLEAP_BASE_URL")
         .args(["--json", "analyze-claim", "--dry-run"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
