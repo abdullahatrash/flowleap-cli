@@ -35,7 +35,11 @@ pub async fn run_cli(base_url: &str, envs: &[(&str, &str)], args: &[&str]) -> Ou
             .env("FLOWLEAP_BASE_URL", &base_url)
             .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
             .env_remove("FLOWLEAP_TOKEN")
-            .env_remove("FLOWLEAP_API_KEY");
+            .env_remove("FLOWLEAP_API_KEY")
+            .env_remove("FLOWLEAP_EPO_KEY")
+            .env_remove("FLOWLEAP_EPO_SECRET")
+            .env_remove("FLOWLEAP_USPTO_KEY")
+            .env_remove("FLOWLEAP_ASSUME_YES");
         for (key, value) in &envs {
             cmd.env(key, value);
         }

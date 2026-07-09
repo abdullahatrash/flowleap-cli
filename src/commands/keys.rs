@@ -91,6 +91,7 @@ fn with_candidate_keys(ctx: &Context, creds: Credentials) -> Context {
         dry_run: false,
         verbose: ctx.verbose,
         token_overridden: ctx.token_overridden,
+        assume_yes: ctx.assume_yes,
         http: ctx.http.clone(),
     }
 }

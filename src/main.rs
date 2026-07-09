@@ -40,6 +40,11 @@ struct Cli {
     #[arg(long, short, global = true)]
     verbose: bool,
 
+    /// Assume "yes" for confirmation prompts, e.g. sending credentials to a
+    /// non-FlowLeap base URL (FLOWLEAP_ASSUME_YES=1 works too)
+    #[arg(long, global = true)]
+    yes: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -228,6 +233,7 @@ async fn run(cli: Cli) -> Result<()> {
         dry_run: cli.dry_run,
         verbose: cli.verbose,
         token_overridden: cli.token.is_some(),
+        assume_yes: cli.yes,
         http: client::build_http_client(),
     };
 

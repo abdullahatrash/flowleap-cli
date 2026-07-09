@@ -29,12 +29,25 @@ pub fn build_http_client() -> Client {
         "FLOWLEAP_CONNECT_TIMEOUT_SECS",
         DEFAULT_CONNECT_TIMEOUT_SECS,
     );
-    Client::builder()
+    let mut builder = Client::builder()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_secs(timeout))
-        .connect_timeout(Duration::from_secs(connect))
-        .build()
-        .unwrap_or_else(|_| Client::new())
+        .connect_timeout(Duration::from_secs(connect));
+    // Test-only DNS pin: FLOWLEAP_TEST_RESOLVE="host=ip:port[,host=ip:port]"
+    // points hostnames at a local mock server so integration tests can exercise
+    // host-based behavior (e.g. the base-URL credential guard) end-to-end. It
+    // only overrides address resolution — the original hostname is still what
+    // gets classified and sent in the Host header.
+    if let Ok(pins) = std::env::var("FLOWLEAP_TEST_RESOLVE") {
+        for pin in pins.split(',') {
+            if let Some((host, addr)) = pin.split_once('=') {
+                if let Ok(addr) = addr.trim().parse::<std::net::SocketAddr>() {
+                    builder = builder.resolve(host.trim(), addr);
+                }
+            }
+        }
+    }
+    builder.build().unwrap_or_else(|_| Client::new())
 }
 
 /// Read a positive whole-seconds value from `name`, falling back to `default`
@@ -259,6 +272,9 @@ pub struct Context {
     /// than the credential store. An explicit token expresses intent, so the
     /// 401 → api_key fallback is disabled.
     pub token_overridden: bool,
+    /// Skip interactive confirmation prompts (--yes; FLOWLEAP_ASSUME_YES also
+    /// works). Warnings still print.
+    pub assume_yes: bool,
     pub http: Client,
 }
 
@@ -319,6 +335,23 @@ impl Context {
             req
         };
         self.apply_auth(req)
+    }
+
+    /// Base-URL credential guard: before anything leaves the process, warn
+    /// (and, in an interactive terminal, confirm) when the destination host is
+    /// not a FlowLeap or local-development host. Runs at most once per
+    /// invocation — see `crate::url_guard`.
+    fn guard_credentials(&self, req: &Request) -> Result<()> {
+        let Some(host) = req.url().host_str() else {
+            return Ok(());
+        };
+        crate::url_guard::enforce(
+            host,
+            &self.credentials,
+            self.output_format == "json",
+            self.dry_run,
+            self.assume_yes,
+        )
     }
 
     /// The API key to retry with when the stored session token is rejected
@@ -415,6 +448,7 @@ impl Context {
     /// Execute a request, handling dry-run and verbose modes
     pub async fn execute(&self, req: RequestBuilder) -> Result<Response> {
         let req = req.build()?;
+        self.guard_credentials(&req)?;
 
         if self.verbose {
             eprintln!("{} {}", req.method(), req.url());
@@ -455,6 +489,7 @@ impl Context {
     /// Execute and parse JSON response
     pub async fn execute_json(&self, req: RequestBuilder) -> Result<Value> {
         let req = req.build()?;
+        self.guard_credentials(&req)?;
 
         if self.verbose {
             self.print_request(&req);
@@ -486,6 +521,7 @@ impl Context {
     /// Still respects dry-run and verbose modes via execute_raw().
     pub async fn execute_json_allow_error(&self, req: RequestBuilder) -> Result<Value> {
         let req = req.build()?;
+        self.guard_credentials(&req)?;
 
         if self.verbose {
             self.print_request(&req);
@@ -515,6 +551,7 @@ impl Context {
     /// Execute and return a stable response envelope, preserving non-2xx API bodies.
     pub async fn execute_json_envelope(&self, req: RequestBuilder) -> Result<Value> {
         let req = req.build()?;
+        self.guard_credentials(&req)?;
 
         if self.verbose {
             self.print_request(&req);
