@@ -1,11 +1,8 @@
 ---
 name: persona-patent-attorney
-version: 1.0.0
-description: "Persona: Patent Attorney — search prior art, analyze claims, assess FTO."
+description: Persona bundle for patent-attorney workflows with the FlowLeap CLI — prior art searching, claim reading, legal-status checks, and freedom-to-operate assessment. Trigger when the user asks the agent to act as a patent attorney or requests attorney-grade prior art review, claim scope analysis, or FTO clearance work.
 metadata:
-  category: "persona"
   requires:
-    bins: ["flowleap"]
     skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops"]
 ---
 
@@ -32,11 +29,12 @@ flowleap ops claims US10987654
 ### 2. Deep Patent Analysis
 
 ```bash
-# Get full patent data
-flowleap ops biblio EP3456789
-flowleap ops abstract EP3456789
-flowleap ops claims EP3456789
+# One-call snapshot, then full text where needed
+flowleap --json summary EP3456789
 flowleap ops description EP3456789
+
+# Decompose a claim into elements for scope analysis
+flowleap analyze-claim --file claim1.txt --focus elements
 ```
 
 ### 3. Freedom-to-Operate Check
@@ -53,7 +51,8 @@ flowleap ops family EP3456789
 
 ## Tips
 
-- Always use `--output json` when chaining commands programmatically
+- Always use `--json` when chaining commands programmatically
 - Check both EPO and USPTO sources for comprehensive prior art
 - Use `flowleap ops family` to find related patents across jurisdictions
-- Use `flowleap ops legal` to check if patents are still active
+- Use `flowleap ops legal` (or `flowleap --json timeline <doc>`) to check if patents are still active
+- For deeper workflows use the recipes: `recipe-prior-art-search`, `recipe-freedom-to-operate`, `recipe-office-action-response`, `recipe-invalidity-analysis`, `recipe-infringement-charting`

@@ -1,17 +1,11 @@
 ---
 name: flowleap-ops
-version: 1.0.0
-description: "FlowLeap OPS: Direct EPO Open Patent Services API access."
-metadata:
-  category: "patent-ai"
-  requires:
-    bins: ["flowleap"]
-  cliHelp: "flowleap ops --help"
+description: Direct EPO Open Patent Services access through the FlowLeap backend — CQL search plus per-document bibliography, claims, description, family, legal status, and abstract. Trigger when an agent needs authoritative EPO document data for a known publication number, full claims or description text, family members, legal-status events, or a raw OPS CQL search.
 ---
 
 # FlowLeap OPS
 
-Prerequisite: Read `flowleap-shared` for authentication and global flags.
+Auth and global flags: see `flowleap-shared`.
 
 Direct access to the European Patent Office (EPO) Open Patent Services API.
 
@@ -31,15 +25,16 @@ flowleap ops search --cql <query> [flags]
 
 ### Document Commands
 
-All document commands take a patent document number (e.g., `EP1234567`):
+All document commands take a patent document number (e.g., `EP1234567`).
+`claims` and `description` accept `--lang` (defaults to `en`):
 
 ```bash
-flowleap ops biblio <doc>                    # Bibliographic data
-flowleap ops claims <doc> [--lang en]        # Claims text (defaults to English)
-flowleap ops description <doc> [--lang en]   # Full description (defaults to English)
-flowleap ops family <doc>                    # Patent family members
-flowleap ops legal <doc>                     # Legal status events
-flowleap ops abstract <doc>                  # Abstract text
+flowleap ops biblio <doc>                  # Bibliographic data
+flowleap ops claims <doc> --lang en        # Claims text
+flowleap ops description <doc> --lang en   # Full description
+flowleap ops family <doc>                  # Patent family members
+flowleap ops legal <doc>                   # Legal status events
+flowleap ops abstract <doc>                # Abstract text
 ```
 
 Doc IDs are normalized server-side — `ep1.000.000` and `EP1000000` both resolve.
@@ -47,7 +42,7 @@ Doc IDs are normalized server-side — `ep1.000.000` and `EP1000000` both resolv
 ### Response envelope
 
 OPS endpoints return data wrapped in a success/error envelope. The CLI unwraps
-`data` automatically so `--output json` prints just the payload. Pass `--verbose`
+`data` automatically so `--json` prints just the payload. Pass `--verbose`
 to see cache status and execution time. Errors use `code` values: `MISSING_PARAM`,
 `NOT_FOUND`, `RATE_LIMITED`, `INTERNAL_ERROR`.
 
@@ -64,7 +59,7 @@ flowleap ops biblio EP1234567
 flowleap ops claims US10123456 --lang de
 
 # Get family members (JSON for agents)
-flowleap ops family EP1234567 --output json
+flowleap ops family EP1234567 --json
 
 # Search with pagination
 flowleap ops search --cql "ti=battery" --start 1 --end 50
@@ -80,3 +75,6 @@ flowleap ops biblio EP1234567 --verbose
 3. Read claims: `flowleap ops claims EP1234567`
 4. Check family: `flowleap ops family EP1234567`
 5. Check legal status: `flowleap ops legal EP1234567`
+
+One-call alternative: `flowleap --json summary EP1234567` bundles biblio,
+legal status, family, and term.

@@ -1,11 +1,8 @@
 ---
 name: recipe-patent-to-report
-version: 1.0.0
-description: "Recipe: Extract all data from a patent for structured analysis."
+description: Recipe for extracting everything about one patent into a structured report — bibliography, abstract, claims, description, family, legal status, prosecution timeline, figures, and related art. Trigger when the user asks for a complete profile, dossier, or report on a specific patent.
 metadata:
-  category: "recipe"
   requires:
-    bins: ["flowleap"]
     skills: ["flowleap-shared", "flowleap-ops", "flowleap-patent"]
 ---
 
@@ -15,30 +12,41 @@ Extract all data from a patent document for structured analysis.
 
 ## Steps
 
-### Step 1: Gather Patent Data
+### Step 1: One-Call Snapshot
 
 ```bash
-flowleap ops biblio <patent-number> --output json
-flowleap ops abstract <patent-number> --output json
-flowleap ops claims <patent-number> --output json
-flowleap ops description <patent-number> --output json
-flowleap ops family <patent-number> --output json
-flowleap ops legal <patent-number> --output json
+flowleap --json summary <patent-number>    # biblio + legal status + family + term
+flowleap --json timeline <patent-number>   # chronological prosecution events
 ```
 
-### Step 2: Find Related Patents
+### Step 2: Gather Full Text
+
+```bash
+flowleap --json ops abstract <patent-number>
+flowleap --json ops claims <patent-number>
+flowleap --json ops description <patent-number>
+```
+
+### Step 3: Figures
+
+```bash
+flowleap figures <patent-number>                          # figure metadata
+flowleap figures <patent-number> --out figure.png --page 3  # save one page
+```
+
+### Step 4: Find Related Patents
 
 ```bash
 # Search for related patents using key terms from the abstract
-flowleap patent search --query "<key terms from abstract>" --limit 10 --output json
+flowleap --json patent search --query "<key terms from abstract>" --limit 10
 ```
 
 ## Output
 
 Complete patent data package including:
 - Bibliographic data (title, applicant, dates, classification)
-- Abstract and description text
-- Full claims text
-- Patent family members across jurisdictions
-- Legal status (active, expired, pending)
+- Legal status, family members, and estimated term
+- Prosecution timeline (register + INPADOC legal events)
+- Abstract, description, and full claims text
+- Drawings/figures
 - Related patents in the same field

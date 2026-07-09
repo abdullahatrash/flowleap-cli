@@ -1,11 +1,8 @@
 ---
 name: persona-researcher
-version: 1.0.0
-description: "Persona: Researcher — explore patents and academic literature for R&D."
+description: Persona bundle for R&D-researcher workflows with the FlowLeap CLI — parallel literature and patent exploration to map what is published versus what is protected. Trigger when the user asks the agent to act as a researcher, survey a technology area across papers and patents, or find gaps between academic work and filed IP.
 metadata:
-  category: "persona"
   requires:
-    bins: ["flowleap"]
     skills: ["flowleap-shared", "flowleap-patent", "flowleap-academic"]
 ---
 
@@ -18,8 +15,11 @@ You are a researcher using FlowLeap CLI to explore patent landscapes and academi
 ### 1. Literature Review
 
 ```bash
-# Search academic papers
+# Search academic papers (Semantic Scholar + arXiv)
 flowleap academic search "solid state battery electrolyte materials" --limit 20
+
+# Widen to OpenAlex non-patent literature
+flowleap --json npl "solid state battery electrolyte" --from-year 2020 --limit 10
 
 # Search patents in the same area
 flowleap patent search --query "solid state battery electrolyte" --limit 20
@@ -39,9 +39,8 @@ flowleap uspto search --query "ti=machine AND ti=learning AND ti=drug" --limit 3
 ### 3. Deep Dive
 
 ```bash
-# Get full patent details
-flowleap ops biblio EP1234567
-flowleap ops abstract EP1234567
+# One-call snapshot, then full text
+flowleap --json summary EP1234567
 flowleap ops claims EP1234567
 flowleap ops description EP1234567
 ```
@@ -50,3 +49,4 @@ flowleap ops description EP1234567
 
 - Use `flowleap academic search` for published research and `flowleap patent search` for IP
 - Combine both to identify gaps between academic research and filed patents
+- For a structured review use `recipe-academic-literature-review`

@@ -1,17 +1,11 @@
 ---
 name: flowleap-patent
-version: 1.0.0
-description: "FlowLeap Patent: Search patents and build CQL queries."
-metadata:
-  category: "patent-ai"
-  requires:
-    bins: ["flowleap"]
-  cliHelp: "flowleap patent --help"
+description: Search EPO patents with CQL and build CQL queries from natural language through the FlowLeap backend. Trigger when an agent needs European or worldwide patent search results, needs a plain-English invention description turned into a CQL query, or wants to tune query strategy (broad, precise, comprehensive). For US-specific ODP searches see flowleap-uspto.
 ---
 
 # FlowLeap Patent
 
-Prerequisite: Read `flowleap-shared` for authentication and global flags.
+Auth and global flags: see `flowleap-shared`.
 
 ## Commands
 
@@ -41,7 +35,7 @@ flowleap patent search --query "solar panel efficiency"
 flowleap uspto search --query "lithium battery" --limit 20   # USPTO uses ODP Lucene syntax, not CQL
 
 # JSON output for agents
-flowleap patent search --query "CRISPR gene editing" --output json
+flowleap patent search --query "CRISPR gene editing" --json
 ```
 
 #### Response Format (JSON)
@@ -81,7 +75,7 @@ flowleap patent build-query "patents about lithium battery recycling filed by Te
 flowleap patent build-query "renewable energy storage systems" --focus comprehensive
 
 # JSON output
-flowleap patent build-query --output json "autonomous vehicle lidar sensors"
+flowleap patent build-query --json "autonomous vehicle lidar sensors"
 ```
 
 #### Response Format (JSON)

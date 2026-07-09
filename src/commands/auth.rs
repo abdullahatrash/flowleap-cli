@@ -89,7 +89,6 @@ async fn create_token(ctx: &Context, name: &str, store: bool) -> Result<()> {
             // durable personal token we just stored — commands would silently
             // keep using the JWT until it expires, then 401.
             creds.token = None;
-            creds.refresh_token = None;
             creds.save()?;
         }
     }
@@ -345,7 +344,6 @@ pub async fn mint_and_store_token(auth_ctx: &Context, name: &str) -> Result<Stri
     let mut creds = Credentials::load()?;
     creds.api_key = Some(token.to_string());
     creds.token = None;
-    creds.refresh_token = None;
     creds.save()?;
     let prefix: String = token.chars().take(11).collect();
     Ok(format!("{}…", prefix))

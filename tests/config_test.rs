@@ -93,9 +93,8 @@ skills = ["flowleap", "flowleap-patent"]
 #[test]
 fn test_credentials_toml_roundtrip() {
     let creds = Credentials {
-        api_key: Some("sk-test-key-123".to_string()),
+        api_key: Some("fl_pat_test_key_123".to_string()),
         token: Some("eyJhbGciOiJIUzI1NiJ9.test".to_string()),
-        refresh_token: Some("refresh-tok-456".to_string()),
         ..Default::default()
     };
 
@@ -103,7 +102,21 @@ fn test_credentials_toml_roundtrip() {
     let deserialized: Credentials = toml::from_str(&serialized).unwrap();
     assert_eq!(deserialized.api_key, creds.api_key);
     assert_eq!(deserialized.token, creds.token);
-    assert_eq!(deserialized.refresh_token, creds.refresh_token);
+}
+
+/// Credentials files written by older CLI versions may carry a
+/// `refresh_token` field that no longer exists on the type; serde must
+/// ignore it rather than fail the load.
+#[test]
+fn test_credentials_ignore_legacy_refresh_token_field() {
+    let legacy = r#"
+api_key = "fl_pat_legacy"
+token = "jwt"
+refresh_token = "refresh-tok-456"
+"#;
+    let creds: Credentials = toml::from_str(legacy).unwrap();
+    assert_eq!(creds.api_key.as_deref(), Some("fl_pat_legacy"));
+    assert_eq!(creds.token.as_deref(), Some("jwt"));
 }
 
 /// Test credentials auth header precedence (token > api_key) against real impl
@@ -113,7 +126,6 @@ fn test_credentials_auth_header_precedence() {
     let creds = Credentials {
         api_key: Some("api-key".to_string()),
         token: Some("my-token".to_string()),
-        refresh_token: None,
         ..Default::default()
     };
     assert_eq!(creds.auth_header(), Some("Bearer my-token".to_string()));
@@ -122,7 +134,6 @@ fn test_credentials_auth_header_precedence() {
     let creds = Credentials {
         api_key: Some("api-key".to_string()),
         token: None,
-        refresh_token: None,
         ..Default::default()
     };
     assert_eq!(creds.auth_header(), Some("Bearer api-key".to_string()));
@@ -132,19 +143,17 @@ fn test_credentials_auth_header_precedence() {
     assert_eq!(creds.auth_header(), None);
 }
 
-/// Test clearing credentials zeroes all three fields
+/// Test clearing credentials zeroes every field
 #[test]
 fn test_credentials_clear() {
     let mut creds = Credentials {
         api_key: Some("key".to_string()),
         token: Some("tok".to_string()),
-        refresh_token: Some("refresh".to_string()),
         ..Default::default()
     };
     creds.clear();
     assert!(creds.api_key.is_none());
     assert!(creds.token.is_none());
-    assert!(creds.refresh_token.is_none());
 }
 
 /// Test that clear_session removes only the OAuth session, so a stored
@@ -154,14 +163,12 @@ fn test_credentials_clear_session() {
     let mut creds = Credentials {
         api_key: Some("fl_pat_key".to_string()),
         token: Some("expired-jwt".to_string()),
-        refresh_token: Some("refresh".to_string()),
         epo_key: Some("epo".to_string()),
         epo_secret: Some("secret".to_string()),
         uspto_key: Some("uspto".to_string()),
     };
     creds.clear_session();
     assert!(creds.token.is_none());
-    assert!(creds.refresh_token.is_none());
     assert_eq!(creds.api_key.as_deref(), Some("fl_pat_key"));
     assert_eq!(creds.epo_key.as_deref(), Some("epo"));
     assert_eq!(creds.epo_secret.as_deref(), Some("secret"));
@@ -204,7 +211,6 @@ fn test_credentials_file_persistence() {
     let creds = Credentials {
         api_key: None,
         token: Some("test-token".to_string()),
-        refresh_token: None,
         ..Default::default()
     };
 
@@ -215,7 +221,6 @@ fn test_credentials_file_persistence() {
     let loaded: Credentials = toml::from_str(&read_contents).unwrap();
     assert_eq!(loaded.api_key, creds.api_key);
     assert_eq!(loaded.token, creds.token);
-    assert_eq!(loaded.refresh_token, creds.refresh_token);
 }
 
 /// Provider keys round-trip through TOML and the EPO pair is all-or-nothing

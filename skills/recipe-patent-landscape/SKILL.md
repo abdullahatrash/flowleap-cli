@@ -1,11 +1,8 @@
 ---
 name: recipe-patent-landscape
-version: 1.0.0
-description: "Recipe: Patent landscape analysis for a technology area."
+description: Recipe for patent landscape analysis of a technology area — scoped searches, key-player identification, recent-activity checks, and full-corpus filing analytics. Trigger when the user asks to map a technology space, identify who patents in an area, or report filing trends and white space.
 metadata:
-  category: "recipe"
   requires:
-    bins: ["flowleap"]
     skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops"]
 ---
 
@@ -26,25 +23,35 @@ flowleap patent build-query "<technology description>"
 
 ```bash
 # Search both databases
-flowleap patent search --query "<CQL>" --limit 50 --output json
-flowleap uspto search --query "<CQL>" --limit 50 --output json   # USPTO uses ODP Lucene syntax, not CQL
+flowleap --json patent search --query "<CQL>" --limit 50
+flowleap --json uspto search --query "<CQL>" --limit 50   # USPTO uses ODP Lucene syntax, not CQL
 ```
 
-### Step 3: Identify Key Players
+### Step 3: Corpus Analytics
+
+```bash
+# Filing trends by year, country and CPC breakdowns, top assignees
+flowleap --json analytics --keyword "<technology>" --date-from 2015-01-01
+flowleap --json analytics --cpc <cpc-prefix> --country US --date-from 2020-01-01
+```
+
+### Step 4: Identify Key Players
 
 ```bash
 # Search top applicants individually
-flowleap patent search --query "pa=<company1> AND ti=<technology>" --output json
-flowleap patent search --query "pa=<company2> AND ti=<technology>" --output json
+flowleap --json patent search --query "pa=<company1> AND ti=<technology>"
+flowleap --json patent search --query "pa=<company2> AND ti=<technology>"
 ```
 
-### Step 4: Check Recent Activity
+### Step 5: Check Recent Activity
 
 ```bash
 # Recent filings using CQL date filters
-flowleap ops search --cql "ti=<technology> AND pd>=2023" --start 1 --end 50
+flowleap ops search --cql "ti=<technology> AND pd>=2024" --start 1 --end 50
 ```
 
 ## Output
 
-A dataset of patent results segmented by database, applicant, and filing date for landscape analysis.
+A dataset of patent results segmented by database, applicant, and filing date,
+plus corpus-level trend charts (filings per year, top assignees, CPC and
+country distributions) for landscape analysis.

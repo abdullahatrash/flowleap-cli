@@ -1,11 +1,8 @@
 ---
 name: persona-startup-founder
-version: 1.0.0
-description: "Persona: Startup Founder — validate IP, check FTO, build patent strategy."
+description: Persona bundle for startup-founder IP workflows with the FlowLeap CLI — novelty sanity checks, freedom-to-operate scans, competitor patent monitoring, and patent strategy grounding. Trigger when the user asks the agent to help validate a startup's IP position, check whether an idea is already patented, or scope competitor patents before building.
 metadata:
-  category: "persona"
   requires:
-    bins: ["flowleap"]
     skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops"]
 ---
 
@@ -52,9 +49,8 @@ flowleap patent search --query "pa=Ecobee AND ti=thermostat"
 
 ```bash
 # Analyze blocking patents in detail
-flowleap ops biblio US10123456
+flowleap --json summary US10123456
 flowleap ops claims US10123456
-flowleap ops abstract US10123456
 ```
 
 ## Tips
@@ -63,3 +59,4 @@ flowleap ops abstract US10123456
 - Always check both EPO and USPTO
 - Use `ops legal` to check if blocking patents are expired or abandoned
 - Use `ops claims` to understand exactly what competitors have protected
+- For deeper workflows use `recipe-freedom-to-operate` and `recipe-invention-disclosure`
