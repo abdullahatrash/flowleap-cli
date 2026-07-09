@@ -1,11 +1,8 @@
 ---
 name: recipe-freedom-to-operate
-version: 1.0.0
-description: "Recipe: Freedom-to-operate search for a product or technology."
+description: Recipe for a freedom-to-operate search — per-feature query generation, dual-database blocking-patent search, and legal-status, family, and claims checks on every candidate. Trigger when the user asks whether a product or technology can be launched without infringing, or requests an FTO/clearance search.
 metadata:
-  category: "recipe"
   requires:
-    bins: ["flowleap"]
     skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops"]
 ---
 
@@ -28,8 +25,8 @@ flowleap patent build-query "<feature 3 description>"
 
 ```bash
 # Search both databases for each feature
-flowleap patent search --query "<CQL for feature 1>" --limit 20 --output json
-flowleap uspto search --query "<CQL for feature 1>" --limit 20 --output json   # USPTO uses ODP Lucene syntax, not CQL
+flowleap --json patent search --query "<CQL for feature 1>" --limit 20
+flowleap --json uspto search --query "<CQL for feature 1>" --limit 20   # USPTO uses ODP Lucene syntax, not CQL
 # Repeat for other features
 ```
 
@@ -38,15 +35,24 @@ flowleap uspto search --query "<CQL for feature 1>" --limit 20 --output json   #
 For each potentially blocking patent:
 
 ```bash
-flowleap ops legal <patent-number> --output json    # Is it active?
-flowleap ops family <patent-number> --output json   # Where is it filed?
-flowleap ops claims <patent-number> --output json   # What does it cover?
+flowleap --json ops legal <patent-number>     # Is it active?
+flowleap --json ops family <patent-number>    # Where is it filed?
+flowleap --json ops claims <patent-number>    # What does it cover?
+```
+
+Or take the one-call snapshot (bibliography + legal status + family + term):
+
+```bash
+flowleap --json summary <patent-number>
 ```
 
 ## Output
 
 FTO data package per blocking patent:
 - Patent search results per product feature
-- Legal status (active, expired, abandoned)
+- Legal status (active, expired, abandoned) and remaining term
 - Geographic coverage (family members)
 - Claims text for scope assessment
+
+For element-by-element mapping of a live risk, continue with
+`recipe-infringement-charting`.

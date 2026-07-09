@@ -150,11 +150,8 @@ Configuration is stored in `~/.config/flowleap/config.toml`.
 # Set base URL
 flowleap config set base-url https://api.flowleap.co
 
-# List all config
-flowleap config list
-
-# Reset to defaults
-flowleap config reset
+# Read a config value
+flowleap config get base-url
 ```
 
 ### Config Precedence
@@ -218,22 +215,35 @@ The daily update notice also warns when installed skills are stale (rendered by 
 ### Skills Directory
 
 ```
-skills/
-  flowleap-shared/SKILL.md        # Auth, global flags, common patterns
-  flowleap-auth/SKILL.md          # Authentication commands
-  flowleap-patent/SKILL.md        # Patent search + query builder
-  flowleap-academic/SKILL.md      # Academic literature search
-  flowleap-ops/SKILL.md           # Direct EPO OPS API
+skills/                            # 28 skills, embedded in the binary
+  flowleap/SKILL.md                # Start here: umbrella + skill map
+  flowleap-shared/SKILL.md         # Auth, global flags, config reference
+  flowleap-auth/SKILL.md           # OAuth device flow + fl_pat_ tokens
+  flowleap-keys/SKILL.md           # BYOK provider keys (EPO OPS, USPTO ODP)
+  flowleap-patent/SKILL.md         # EPO patent search + CQL query builder
+  flowleap-uspto/SKILL.md          # USPTO ODP search, grants, continuity
+  flowleap-ops/SKILL.md            # Direct EPO OPS document data
+  flowleap-academic/SKILL.md       # Academic literature search
+  flowleap-npl/SKILL.md            # Non-patent literature (OpenAlex)
+  flowleap-legal/SKILL.md          # Patent-law reference search (RAG)
+  flowleap-citation/SKILL.md       # USPTO enriched citation data
+  flowleap-tools/SKILL.md          # Agent-first /v1/tools facade
   persona-patent-attorney/SKILL.md
+  persona-ip-analyst/SKILL.md
   persona-researcher/SKILL.md
   persona-startup-founder/SKILL.md
-  persona-ip-analyst/SKILL.md
   recipe-prior-art-search/SKILL.md
   recipe-patent-landscape/SKILL.md
-  recipe-patent-to-report/SKILL.md
-  recipe-claim-analysis/SKILL.md
   recipe-freedom-to-operate/SKILL.md
+  recipe-claim-analysis/SKILL.md
+  recipe-patent-to-report/SKILL.md
   recipe-academic-literature-review/SKILL.md
+  recipe-office-action-response/SKILL.md    # prosecution
+  recipe-claim-drafting/SKILL.md            # prosecution
+  recipe-invention-disclosure/SKILL.md      # prosecution
+  recipe-invalidity-analysis/SKILL.md       # litigation
+  recipe-infringement-charting/SKILL.md     # litigation
+  recipe-audit-report/SKILL.md              # governance
 ```
 
 ### Agent-Friendly Output

@@ -1,11 +1,8 @@
 ---
 name: recipe-prior-art-search
-version: 1.0.0
-description: "Recipe: Comprehensive prior art search across patents and academic literature."
+description: Recipe for a comprehensive prior art search — natural-language query generation, dual EPO/USPTO patent search, academic literature sweep, and deep dives on the closest hits. Trigger when the user asks to find prior art for an invention, run a novelty search, or check what already exists before filing.
 metadata:
-  category: "recipe"
   requires:
-    bins: ["flowleap"]
     skills: ["flowleap-shared", "flowleap-patent", "flowleap-academic", "flowleap-ops"]
 ---
 
@@ -26,14 +23,15 @@ Take note of the generated CQL query.
 ### Step 2: Search Patents (EPO + USPTO)
 
 ```bash
-flowleap patent search --query "<CQL from step 1>" --limit 20 --output json
-flowleap uspto search --query "<CQL from step 1>" --limit 20 --output json   # USPTO uses ODP Lucene syntax, not CQL
+flowleap --json patent search --query "<CQL from step 1>" --limit 20
+flowleap --json uspto search --query "<CQL from step 1>" --limit 20   # USPTO uses ODP Lucene syntax, not CQL
 ```
 
 ### Step 3: Search Academic Literature
 
 ```bash
-flowleap academic search "<invention keywords>" --limit 15 --output json
+flowleap --json academic search "<invention keywords>" --limit 15
+flowleap --json npl "<invention keywords>" --limit 10
 ```
 
 ### Step 4: Deep Dive on Relevant Results

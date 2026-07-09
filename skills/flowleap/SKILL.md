@@ -1,11 +1,14 @@
 ---
 name: flowleap
-description: Use the installed FlowLeap CLI to inspect FlowLeap Patent AI backend health, authenticate safely, run patent/USPTO/OPS/academic/NPL/legal/citation reads, and use the raw API escape hatch. Trigger when a user asks an agent to use FlowLeap, query the FlowLeap backend, verify local or deployed FlowLeap API health, run patent research commands, or debug FlowLeap CLI/API behavior.
+description: Start here — the umbrella skill for the FlowLeap Patent AI CLI. Maps every command family (patent/USPTO/OPS/academic/NPL/legal/citation reads, analytics, OCR, claim analysis, one-call patent verbs, the tools facade, and the raw API escape hatch) and routes to the specialist skills. Trigger when a user asks an agent to use FlowLeap, query the FlowLeap backend, verify local or deployed FlowLeap API health, run patent research commands, or debug FlowLeap CLI/API behavior.
 ---
 
 # FlowLeap CLI
 
-Use `flowleap` as the command layer for the FlowLeap Patent AI backend. Prefer installed `flowleap` on `PATH`; when working inside this repo before installation, use `target/debug/flowleap` after `cargo build`.
+Use `flowleap` as the command layer for the FlowLeap Patent AI backend.
+This is the entry-point skill: it maps the CLI surface and points to the
+specialist skills. Shared reference (auth, global flags, config, output
+formats): `flowleap-shared`.
 
 ## Start Here
 
@@ -33,20 +36,23 @@ flowleap --json doctor --base-url https://api.flowleap.co
 Use env/config auth; avoid credential flags except for explicit one-off tests.
 
 ```bash
-export FLOWLEAP_API_KEY=...
-flowleap auth login --api-key ...
+export FLOWLEAP_API_KEY=fl_pat_your_token_here
+flowleap auth login --api-key fl_pat_your_token_here
 flowleap --json api profile
 ```
 
 All credentials are sent as `Authorization: Bearer …` — either a Clerk JWT
-(from `flowleap auth login` OAuth flow) or a personal API token (`fl_pat_…`).
-Mint long-lived tokens for headless use:
+(from the `flowleap auth login` OAuth device flow: user code + verification
+URL) or a personal API token (`fl_pat_…`). Mint long-lived tokens for
+headless use:
 
 ```bash
 flowleap auth create-token --name my-agent --store
 flowleap auth tokens
 flowleap auth revoke-token <id>
 ```
+
+Details: the `flowleap-auth` skill.
 
 ## Provider Keys (BYOK)
 
@@ -70,14 +76,19 @@ flowleap --json tools list
 flowleap --json tools run get_patent_summary patent_number=EP1000000
 ```
 
-## Install Skills
+## One-Call Patent Verbs
 
-Ship these skills to any agent's skills directory:
+Ergonomic wrappers over the tools facade plus document utilities:
 
 ```bash
-flowleap skills install              # → ~/.claude/skills
-flowleap skills install --project    # → .claude/skills
-flowleap skills install --dir <path> # any other agent
+flowleap --json summary EP1000000                      # biblio + legal + family + term
+flowleap --json timeline EP1000000                     # prosecution timeline
+flowleap --json compare EP1000000 US5443036            # 2-10 patents side by side
+flowleap figures EP1000000 --out figure.png --page 3   # drawings; metadata without --out
+flowleap --json convert-number EP1000000 --to docdb    # epodoc|docdb|original
+flowleap --json analytics --keyword battery --date-from 2015-01-01   # corpus trends
+flowleap ocr ./office-action.pdf                       # PDF/image/docx text extraction
+flowleap analyze-claim --file claim1.txt --focus elements   # claim decomposition
 ```
 
 ## Safe Read Workflow
@@ -126,19 +137,20 @@ flowleap --json api request post /v1/patent-search --body-file request.json --dr
 
 Do not run raw `post`, `put`, `patch`, or `delete` against a live service unless the user asked for that specific write. Prefer `--dry-run` first.
 
-## Install And Validate
+## Install Skills
+
+Ship these skills to any agent's skills directory:
 
 ```bash
-make install-local
-command -v flowleap
-flowleap --json doctor
+flowleap skills install              # → ~/.claude/skills
+flowleap skills install --project    # → .claude/skills
+flowleap skills install --dir <path> # any other agent
 ```
 
-Required repo checks before publishing CLI changes:
+## Skill Map
 
-```bash
-cargo build
-cargo test
-cargo clippy -- -D warnings
-cargo fmt --check
-```
+- Shared reference: `flowleap-shared` (auth, flags, config), `flowleap-auth`, `flowleap-keys`
+- Data sources: `flowleap-patent` (EPO CQL), `flowleap-uspto` (ODP Lucene), `flowleap-ops` (EPO documents), `flowleap-academic`, `flowleap-npl`, `flowleap-legal`, `flowleap-citation`, `flowleap-tools` (facade)
+- Personas: `persona-patent-attorney`, `persona-ip-analyst`, `persona-researcher`, `persona-startup-founder`
+- Recipes (search/analysis): `recipe-prior-art-search`, `recipe-patent-landscape`, `recipe-freedom-to-operate`, `recipe-claim-analysis`, `recipe-patent-to-report`, `recipe-academic-literature-review`
+- Recipes (prosecution/litigation): `recipe-office-action-response`, `recipe-invalidity-analysis`, `recipe-infringement-charting`, `recipe-claim-drafting`, `recipe-invention-disclosure`, `recipe-audit-report`

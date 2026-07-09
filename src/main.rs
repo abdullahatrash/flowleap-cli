@@ -377,3 +377,244 @@ async fn init(ctx: &client::Context, base_url: &str) -> Result<()> {
     }
     Ok(())
 }
+
+/// Skill↔CLI validation: every `flowleap …` example inside a ```bash fence
+/// of every embedded skill must parse against the real clap command tree, so
+/// skill content cannot drift from the CLI it documents.
+///
+/// Normalization applied to each documented command line before parsing:
+/// - `\` line continuations are joined into one line
+/// - tokens are split shell-words style (quoted strings stay one token)
+/// - the command is cut at the first shell operator token (`|`, `||`, `&&`,
+///   `;`, `>`, `>>`, `<`) or comment token (`#…`) — only the flowleap
+///   invocation itself is validated
+/// - `<angle-bracket>` placeholders and `$(command substitutions)` stand for
+///   user-supplied values and are replaced with the literal `X`
+/// - `[optional]` usage-notation tokens are dropped
+///
+/// A parse outcome counts as valid when the command and its flags exist:
+/// `Ok`, help/version, missing required arguments, and invalid *values* are
+/// all fine. Unknown arguments, unknown subcommands, and conflicting flags
+/// fail the test.
+#[cfg(test)]
+mod skill_validation_tests {
+    use super::Cli;
+    use clap::error::ErrorKind;
+    use clap::Parser as _;
+    use flowleap_cli::commands::skills::embedded_skill_docs;
+
+    /// Extract every `flowleap …` command line from the ```bash fences of a
+    /// SKILL.md document, joining `\` line continuations.
+    fn extract_flowleap_commands(contents: &str) -> Vec<String> {
+        let mut commands = Vec::new();
+        // Some(true) = inside a bash fence, Some(false) = inside another
+        // fence (json, …), None = outside any fence.
+        let mut fence: Option<bool> = None;
+        let mut pending = String::new();
+        for line in contents.lines() {
+            let trimmed = line.trim();
+            if let Some(info) = trimmed.strip_prefix("```") {
+                fence = match fence {
+                    Some(_) => None,
+                    None => Some(matches!(info.trim(), "bash" | "sh")),
+                };
+                pending.clear();
+                continue;
+            }
+            if fence != Some(true) {
+                continue;
+            }
+            let continued = !pending.is_empty();
+            if !continued && !trimmed.starts_with("flowleap ") {
+                continue;
+            }
+            match trimmed.strip_suffix('\\') {
+                Some(head) => {
+                    pending.push_str(head.trim_end());
+                    pending.push(' ');
+                }
+                None => {
+                    pending.push_str(trimmed);
+                    commands.push(std::mem::take(&mut pending));
+                }
+            }
+        }
+        commands
+    }
+
+    /// Shell operator tokens that end the flowleap invocation.
+    fn is_shell_operator(token: &str) -> bool {
+        matches!(token, "|" | "||" | "&&" | ";" | ">" | ">>" | "<")
+    }
+
+    /// Usage-notation opener like `[flags]` or `[--lang` — but not a JSON
+    /// value such as `["EP1000000"]`, which stays a real argument.
+    fn starts_optional_notation(token: &str) -> bool {
+        token.starts_with('[') && !token.contains('{') && !token.contains('"')
+    }
+
+    /// Tokenize one documented command line into argv for clap (see the
+    /// module doc for the normalization rules). `[optional]` usage notation
+    /// may span several tokens (`[--lang en]`); the whole span is dropped.
+    fn normalize_command(line: &str) -> Result<Vec<String>, String> {
+        let tokens = shell_words::split(line).map_err(|err| format!("cannot tokenize: {err}"))?;
+        let mut argv = Vec::new();
+        let mut in_optional_notation = false;
+        for token in tokens {
+            if in_optional_notation {
+                in_optional_notation = !token.ends_with(']');
+                continue;
+            }
+            if is_shell_operator(&token) || token.starts_with('#') {
+                break;
+            }
+            if starts_optional_notation(&token) {
+                in_optional_notation = !token.ends_with(']');
+                continue;
+            }
+            if (token.starts_with('<') && token.ends_with('>') && token.len() > 2)
+                || token.contains("$(")
+            {
+                argv.push("X".to_string());
+            } else {
+                argv.push(token);
+            }
+        }
+        Ok(argv)
+    }
+
+    /// Validate every extracted command of one document; returns one message
+    /// per invalid example.
+    fn validate_snippet(source: &str, contents: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+        for line in extract_flowleap_commands(contents) {
+            let argv = match normalize_command(&line) {
+                Ok(argv) => argv,
+                Err(message) => {
+                    errors.push(format!("{source}: `{line}` — {message}"));
+                    continue;
+                }
+            };
+            if let Err(err) = Cli::try_parse_from(&argv) {
+                if matches!(
+                    err.kind(),
+                    ErrorKind::UnknownArgument
+                        | ErrorKind::InvalidSubcommand
+                        | ErrorKind::ArgumentConflict
+                ) {
+                    let reason = err.to_string();
+                    let reason = reason.lines().next().unwrap_or_default();
+                    errors.push(format!("{source}: `{line}` — {reason}"));
+                }
+            }
+        }
+        errors
+    }
+
+    /// Full `description:` frontmatter value of one SKILL.md, unquoted.
+    fn frontmatter_description(contents: &str) -> Option<String> {
+        contents
+            .lines()
+            .find(|line| line.starts_with("description:"))
+            .map(|line| {
+                line.trim_start_matches("description:")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string()
+            })
+    }
+
+    #[test]
+    fn every_documented_flowleap_example_parses() {
+        let mut errors = Vec::new();
+        let mut checked = 0;
+        for (name, contents) in embedded_skill_docs() {
+            checked += extract_flowleap_commands(contents).len();
+            errors.extend(validate_snippet(name, contents));
+        }
+        assert!(
+            checked > 0,
+            "no flowleap examples found in any embedded skill"
+        );
+        assert!(
+            errors.is_empty(),
+            "documented commands that do not parse against the CLI:\n{}",
+            errors.join("\n")
+        );
+    }
+
+    #[test]
+    fn every_skill_description_is_a_routing_signal() {
+        for (name, contents) in embedded_skill_docs() {
+            let description = frontmatter_description(contents)
+                .unwrap_or_else(|| panic!("{name}: missing description frontmatter"));
+            assert!(
+                description.len() >= 60,
+                "{name}: description too short ({} chars) to route on: {description}",
+                description.len()
+            );
+            assert!(
+                description.contains("Trigger when"),
+                "{name}: description lacks a \"Trigger when\" routing clause: {description}"
+            );
+        }
+    }
+
+    /// A deliberately broken snippet must fail: proves the validator rejects
+    /// unknown subcommands and unknown flags rather than passing everything.
+    #[test]
+    fn broken_examples_are_rejected() {
+        let bad = "```bash\n\
+                   flowleap patnet search --query battery\n\
+                   flowleap patent search --query battery --nonexistent-flag 5\n\
+                   flowleap patent search --query battery --limit 5\n\
+                   ```\n";
+        let errors = validate_snippet("inline", bad);
+        assert_eq!(
+            errors.len(),
+            2,
+            "expected exactly the two broken examples to fail: {errors:?}"
+        );
+        assert!(errors[0].contains("patnet"));
+        assert!(errors[1].contains("nonexistent-flag"));
+    }
+
+    /// Normalization keeps quoted values together, replaces placeholders,
+    /// and cuts at pipes/redirects/comments.
+    #[test]
+    fn normalization_rules() {
+        let argv = normalize_command(
+            "flowleap ops search --cql \"ti=solar AND pa=Tesla\" --end 50 # comment",
+        )
+        .expect("tokenize");
+        assert_eq!(
+            argv,
+            [
+                "flowleap",
+                "ops",
+                "search",
+                "--cql",
+                "ti=solar AND pa=Tesla",
+                "--end",
+                "50"
+            ]
+        );
+
+        let argv = normalize_command("flowleap ocr <office-action.pdf> [flags] > out.md")
+            .expect("tokenize");
+        assert_eq!(argv, ["flowleap", "ocr", "X"]);
+
+        // Multi-token optional notation is dropped; JSON arrays are kept.
+        let argv = normalize_command("flowleap ops claims <doc> [--lang en]").expect("tokenize");
+        assert_eq!(argv, ["flowleap", "ops", "claims", "X"]);
+        let argv = normalize_command(
+            "flowleap tools run compare_patents --input '{\"patent_numbers\":[\"EP1000000\"]}'",
+        )
+        .expect("tokenize");
+        assert_eq!(argv.len(), 6);
+
+        let argv = normalize_command("flowleap analyze-claim \"$(cat claim.txt)\" | head")
+            .expect("tokenize");
+        assert_eq!(argv, ["flowleap", "analyze-claim", "X"]);
+    }
+}

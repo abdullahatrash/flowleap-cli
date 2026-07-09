@@ -94,6 +94,21 @@ pub fn run(ctx: &Context, args: SkillsArgs) -> Result<()> {
     }
 }
 
+/// Every embedded skill as (name, SKILL.md contents). Shared with the
+/// binary's skill↔CLI validation test, which parses each documented
+/// `flowleap …` example against the real clap command tree.
+pub fn embedded_skill_docs() -> Vec<(&'static str, &'static str)> {
+    skill_names()
+        .into_iter()
+        .filter_map(|name| {
+            EMBEDDED_SKILLS
+                .get_file(format!("{}/SKILL.md", name))
+                .and_then(|file| file.contents_utf8())
+                .map(|contents| (name, contents))
+        })
+        .collect()
+}
+
 fn skill_names() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = EMBEDDED_SKILLS
         .dirs()

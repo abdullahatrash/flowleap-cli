@@ -1,39 +1,50 @@
 ---
 name: flowleap-auth
-version: 1.0.0
-description: "FlowLeap Auth: OAuth 2.0 + PKCE login, API key auth, and status."
-metadata:
-  category: "patent-ai"
-  requires:
-    bins: ["flowleap"]
-  cliHelp: "flowleap auth --help"
+description: Authenticate the FlowLeap CLI — OAuth 2.0 device flow login (user code + verification URL), long-lived fl_pat_ personal API tokens for headless agents, status checks, and targeted logout. Trigger when a FlowLeap command fails with 401/unauthenticated, when setting up credentials for an agent or CI, or when the user asks to log in to FlowLeap or mint, list, or revoke API tokens.
 ---
 
 # FlowLeap Auth
 
-Prerequisite: Read `flowleap-shared` for global flags and configuration.
+Global flags and configuration: see `flowleap-shared`.
 
 ## Commands
 
-### Login via OAuth (opens browser)
+### Login via OAuth device flow
 
 ```bash
 flowleap auth login
 ```
 
-Starts OAuth 2.0 + PKCE flow: opens browser, runs local callback server, exchanges code for JWT, stores in `~/.config/flowleap/credentials.toml`.
+Starts the OAuth 2.0 device flow: the CLI requests a device code from the
+backend, prints a user code plus verification URL (and opens the browser),
+then polls until the login is approved. The resulting session JWT is stored
+in `~/.config/flowleap/credentials.toml` (mode 0600). No local callback
+server is involved, so it also works when the browser runs on another
+machine — open the printed URL and enter the user code there.
 
-### Login with API Key
+### Login with a personal API token
 
 ```bash
-flowleap auth login --api-key sk-your-key-here
+flowleap auth login --api-key fl_pat_your_token_here
 ```
 
-### Login with Token
+### Login with a session token
 
 ```bash
 flowleap auth login --token eyJhbGci...
 ```
+
+### Personal API tokens (headless/agent use)
+
+```bash
+flowleap auth create-token --name my-agent --store   # mint + store (shown once)
+flowleap auth tokens                                 # list tokens
+flowleap auth revoke-token <id>                      # revoke by id
+```
+
+Personal tokens use the `fl_pat_…` format and are long-lived. Minting
+requires an OAuth session — API tokens cannot mint further tokens
+(backend-enforced).
 
 ### Check Status
 
@@ -62,4 +73,5 @@ was passed explicitly via `--token` or `FLOWLEAP_TOKEN`.
 
 ## Environment Variable Override
 
-Set `FLOWLEAP_API_KEY` or `FLOWLEAP_TOKEN` to bypass stored credentials entirely. These take effect without running `auth login`.
+Set `FLOWLEAP_API_KEY` (an `fl_pat_…` token) or `FLOWLEAP_TOKEN` to bypass
+stored credentials entirely. These take effect without running `auth login`.

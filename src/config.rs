@@ -42,11 +42,14 @@ pub struct SkillInstall {
 }
 
 /// Credentials stored separately in ~/.config/flowleap/credentials.toml
+///
+/// Older CLI versions wrote a `refresh_token` field that nothing ever
+/// populated; serde ignores unknown fields, so files written by those
+/// versions still load fine.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Credentials {
     pub api_key: Option<String>,
     pub token: Option<String>,
-    pub refresh_token: Option<String>,
     /// BYOK patent-provider credentials, forwarded per-request as headers
     /// (x-epo-ops-key / x-epo-ops-secret / x-uspto-odp-key). EPO key and
     /// secret only work as a pair — the backend rejects half a pair.
@@ -145,18 +148,16 @@ impl Credentials {
     pub fn clear(&mut self) {
         self.api_key = None;
         self.token = None;
-        self.refresh_token = None;
         self.epo_key = None;
         self.epo_secret = None;
         self.uspto_key = None;
     }
 
-    /// Clear only the OAuth session (token + refresh token), keeping the
-    /// API key and BYOK provider keys. An expired session token would
-    /// otherwise shadow a still-valid api_key in auth_header().
+    /// Clear only the OAuth session token, keeping the API key and BYOK
+    /// provider keys. An expired session token would otherwise shadow a
+    /// still-valid api_key in auth_header().
     pub fn clear_session(&mut self) {
         self.token = None;
-        self.refresh_token = None;
     }
 
     /// EPO pair, only when complete (the backend rejects half a pair).
