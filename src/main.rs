@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{error::ErrorKind, Parser, Subcommand};
 use flowleap_cli::commands::{
     academic, analytics, analyze_claim, api, auth, citation, config_cmd, doctor, facade, health,
-    keys, legal, npl, ocr, ops, patent, skills, tools, uspto,
+    keys, legal, mcp, npl, ocr, ops, patent, skills, tools, uspto,
 };
 use flowleap_cli::{client, config, update};
 use serde_json::json;
@@ -96,6 +96,8 @@ enum Commands {
     ConvertNumber(facade::ConvertNumberArgs),
     /// Discover and run backend tools (agent-first /v1/tools facade)
     Tools(tools::ToolsArgs),
+    /// Serve backend tools over the Model Context Protocol (stdio)
+    Mcp(mcp::McpArgs),
     /// Install FlowLeap agent skills into an agent's skills directory
     Skills(skills::SkillsArgs),
     /// Manage CLI configuration
@@ -243,8 +245,13 @@ async fn run(cli: Cli) -> Result<()> {
         && std::io::IsTerminal::is_terminal(&std::io::stdin())
         && std::io::IsTerminal::is_terminal(&std::io::stderr());
     // Once-a-day update notice. Spawned before the command so the registry
-    // fetch overlaps its work; printed to stderr after it finishes.
-    let update_check = update::spawn_check(&ctx.http, cli.json, cli.dry_run);
+    // fetch overlaps its work; printed to stderr after it finishes. Never
+    // runs in MCP server mode: the process is a long-lived protocol server.
+    let update_check = if matches!(cli.command, Commands::Mcp(_)) {
+        None
+    } else {
+        update::spawn_check(&ctx.http, cli.json, cli.dry_run)
+    };
 
     let result = if wants_first_run && offer_first_run_setup(&ctx).await? {
         // Reload credentials the wizard just wrote and continue the command.
@@ -272,7 +279,10 @@ async fn run(cli: Cli) -> Result<()> {
 }
 
 /// Commands that hit an authenticated endpoint (everything except local/auth-
-/// managing ones). Used to decide whether to offer first-run setup.
+/// managing ones). Used to decide whether to offer first-run setup. `mcp` is
+/// excluded even though it calls authenticated endpoints: stdin is its
+/// protocol channel, and an unauthenticated server must still start and
+/// report auth errors in-band.
 fn command_needs_auth(command: &Commands) -> bool {
     !matches!(
         command,
@@ -283,6 +293,7 @@ fn command_needs_auth(command: &Commands) -> bool {
             | Commands::Health(_)
             | Commands::Skills(_)
             | Commands::Config(_)
+            | Commands::Mcp(_)
     )
 }
 
@@ -329,6 +340,7 @@ async fn dispatch(command: Commands, ctx: &client::Context) -> Result<()> {
         Commands::Timeline(args) => facade::timeline(ctx, args).await,
         Commands::ConvertNumber(args) => facade::convert_number(ctx, args).await,
         Commands::Tools(args) => tools::run(ctx, args).await,
+        Commands::Mcp(args) => mcp::run(ctx, args).await,
         Commands::Skills(args) => skills::run(ctx, args),
         Commands::Config(args) => config_cmd::run(ctx, args).await,
     }

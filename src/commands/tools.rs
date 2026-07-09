@@ -102,6 +102,10 @@ async fn describe(ctx: &Context, name: &str) -> Result<()> {
     }
 }
 
+fn tool_path(name: &str) -> String {
+    format!("/v1/tools/{}", encode_url_component(name))
+}
+
 /// Execute a backend tool through the `/v1/tools/{name}` facade.
 ///
 /// Returns the backend's tool envelope (`{ success, tool, data,
@@ -109,8 +113,24 @@ async fn describe(ctx: &Context, name: &str) -> Result<()> {
 /// active. Shared by `tools run` and the ergonomic verbs (`compare`,
 /// `figures`, `summary`, `timeline`, `convert-number`).
 pub async fn call_tool(ctx: &Context, name: &str, input: &Value) -> Result<Value> {
-    let path = format!("/v1/tools/{}", encode_url_component(name));
-    ctx.execute_json_body_or_error(ctx.post(&path, input)).await
+    ctx.execute_json_body_or_error(ctx.post(&tool_path(name), input))
+        .await
+}
+
+/// Execute a backend tool and return the raw response envelope
+/// (`{ ok, status, body, providerKeysHint?, retryAfterSeconds? }`) without
+/// printing anything. The seam the MCP bridge (`flowleap mcp`) runs on: it
+/// must keep stdout protocol-clean and needs the structured error hints
+/// intact instead of `call_tool`'s print-and-fail behavior.
+pub async fn call_tool_envelope(ctx: &Context, name: &str, input: &Value) -> Result<Value> {
+    ctx.execute_json_envelope(ctx.post(&tool_path(name), input))
+        .await
+}
+
+/// Fetch the `/v1/tools` registry as a raw response envelope (never prints).
+/// Same seam as [`call_tool_envelope`], for MCP `tools/list`.
+pub async fn fetch_tools_envelope(ctx: &Context) -> Result<Value> {
+    ctx.execute_json_envelope(ctx.get("/v1/tools")).await
 }
 
 async fn run_tool(
