@@ -543,6 +543,22 @@ mod skill_validation_tests {
         );
     }
 
+    /// README↔CLI validation: every `flowleap …` example inside a ```bash
+    /// fence of README.md must parse against the real clap command tree,
+    /// under the same normalization rules as the embedded skills.
+    #[test]
+    fn every_documented_readme_example_parses() {
+        let readme = include_str!("../README.md");
+        let checked = extract_flowleap_commands(readme).len();
+        assert!(checked > 0, "no flowleap examples found in README.md");
+        let errors = validate_snippet("README.md", readme);
+        assert!(
+            errors.is_empty(),
+            "README examples that do not parse against the CLI:\n{}",
+            errors.join("\n")
+        );
+    }
+
     #[test]
     fn every_skill_description_is_a_routing_signal() {
         for (name, contents) in embedded_skill_docs() {
