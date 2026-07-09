@@ -1,218 +1,297 @@
 # FlowLeap CLI
 
-One CLI for FlowLeap Patent AI — built for humans and AI agents.
+One CLI + MCP server for [FlowLeap Patent AI](https://flowleap.co) — built for humans and AI agents.
 
-A Rust CLI for the [FlowLeap Patent AI](https://api.flowleap.co) backend API. Search patents, build queries, and explore academic literature — all from your terminal. Ships with Agent Skills (SKILL.md files) for seamless AI agent integration.
-
-## Installation
-
-**npm / pnpm / yarn:**
-```bash
-npm i -g flowleap
-```
-
-The npm package has no install scripts. The native binary is downloaded on
-first run from the matching GitHub release, verified against the release's
-sha256 `checksums.txt` before it executes, and the package is published with
-[npm provenance](https://docs.npmjs.com/generating-provenance-statements)
-attesting the exact repo, commit, and CI run that built it.
-
-**Quick install (macOS / Linux):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
-```
-
-**From source (requires Rust):**
-```bash
-cargo install --git https://github.com/abdullahatrash/flowleap-cli.git
-```
+`flowleap` puts the FlowLeap Patent AI backend in your terminal: patent search across EPO and USPTO, natural-language query building, academic and non-patent literature, patent-law reference search, enriched citation data, OCR, full-corpus analytics, and one-call patent snapshots. The same binary serves every backend tool to AI agents — as a stdio [MCP](https://modelcontextprotocol.io) server (`flowleap mcp`) and as bundled Agent Skills (`flowleap skills install`) for Claude Code, Codex, Cursor, and Gemini CLI.
 
 ## Quick Start
 
 ```bash
-# Verify CLI setup and backend reachability
-flowleap --json doctor
+# 1. Install (more channels under "Installation" below)
+npm i -g flowleap
 
-# Use the local backend during development
-flowleap --json doctor --base-url http://localhost:8000
-
-# Authenticate (opens browser for OAuth)
+# 2. Authenticate — OAuth 2.0 device flow, opens your browser
 flowleap auth login
 
-# Or mint a long-lived personal API token for headless/agent use
-flowleap auth create-token --name my-agent --store
-
-# One-time guided setup (auth + BYOK provider keys)
-flowleap setup
-
-# Search patents
-flowleap patent search --query "solar panel efficiency"
-
-# Build a CQL query from natural language; dry-run verifies request shape
-flowleap patent build-query "patents about lithium battery recycling filed by Tesla" --dry-run
-
-# Direct EPO OPS access
-flowleap ops biblio EP1234567
-flowleap ops claims EP1234567
-
-# USPTO Open Data Portal
-flowleap uspto search --query "wireless charging" --limit 3
-flowleap uspto grant 11800000
-
-# Search academic literature
-flowleap academic search "machine learning patent classification"
-
-# Search NPL, legal, and citation data
-flowleap --json npl "battery thermal management" --limit 10
-flowleap --json legal search "doctrine of equivalents" --limit 10
-flowleap --json citation search 16000001 --size 20
-
-# Raw API escape hatch
-flowleap --json api request get /v1/health
-flowleap --json api request post /v1/patent-search --body-file request.json --dry-run
+# 3. First query
+flowleap patent search --query "solar panel efficiency" --limit 5
 ```
 
-## Smoke Tests
-
-Use these commands after installing or publishing a new version. They are also good examples for agents because they use `--json` and make required flags explicit.
+Verify your setup any time:
 
 ```bash
-# Installed version
-flowleap --version
-
-# Production health and auth/config check
-flowleap --json doctor --base-url https://api.flowleap.co
-
-# Patent search requires --query
-flowleap --json patent search --query "battery cooling system" --limit 3 --base-url https://api.flowleap.co
-flowleap --json uspto search --query "wireless charging" --limit 3 --base-url https://api.flowleap.co
-
-# These commands use positional text arguments
-flowleap --json academic search "solid state battery electrolyte" --limit 3 --base-url https://api.flowleap.co
+flowleap doctor
 ```
 
-When debugging request shape, add `--dry-run`. This is also the safest way to test endpoints whose backend query contract may still be changing:
+`doctor` checks config, credentials, and backend reachability, and tells you what to fix.
+
+## Access & Pricing
+
+The CLI itself is open source (MIT) and free to install. The patent-data commands call the FlowLeap backend, which requires:
+
+- **A FlowLeap account with an active Basic plan.** A trial is available — see [flowleap.co/pricing](https://flowleap.co/pricing).
+- Without an active plan, data commands return HTTP 402 and exit with code 4. In `--json` mode the error envelope carries a structured `subscriptionHint` — `{ requiresHumanIntervention: true, plan: "Basic", upgradeUrl, message }` — with the upgrade URL. **This is expected behavior, not a bug**: agents should surface the URL to a human rather than retry.
+- All `/v1` data routes share a rate limit of 60 requests/minute/user. Exceeding it returns HTTP 429 (exit code 6) with a `rateLimitHint` carrying `retryAfterSeconds`.
+
+Some data sources additionally need your own provider credentials (free signups): EPO OPS (key + secret) and USPTO ODP (API key). Run `flowleap setup` for the guided wizard, or see `flowleap keys --help`.
+
+`doctor`, `health`, `auth`, and `keys test` work without a subscription, so you can always diagnose your setup.
+
+## Use with AI Agents
+
+Two integration paths, both embedded in the binary — no network needed to install:
+
+- **MCP server**: `flowleap mcp` serves every backend tool over stdio MCP. Tools are mirrored live from the backend's `/v1/tools` registry, so new backend tools appear without a CLI update.
+- **Agent Skills**: `flowleap skills install` writes SKILL.md documentation (or a condensed rules file, depending on the harness) into the location your agent auto-loads.
+
+Authenticate once before wiring either path (`flowleap auth login`, or set `FLOWLEAP_API_KEY` for headless use). An unauthenticated MCP server still starts, but every tool call returns an error explaining how to log in.
+
+### Claude Code
 
 ```bash
-flowleap --json patent search --query "battery cooling system" --limit 1 --dry-run
-flowleap --json uspto search --query "wireless charging" --limit 1 --base-url https://api.flowleap.co --dry-run
-flowleap --json patent build-query "battery cooling system for electric vehicles" --base-url https://api.flowleap.co --dry-run
+# MCP server
+claude mcp add flowleap -- flowleap mcp
+
+# and/or skills (full SKILL.md directories)
+flowleap skills install                            # user-level: ~/.claude/skills
+flowleap skills install --target claude-project    # this project: ./.claude/skills
 ```
 
-`--dry-run` shows the exact method, URL, auth status, and JSON body the CLI will send.
-
-## Authentication
-
-FlowLeap CLI supports three authentication methods (all sent as `Authorization: Bearer`):
-
-1. **OAuth 2.0 Device Flow** (recommended for humans): `flowleap auth login` opens your browser
-2. **Personal API token** (recommended for agents/CI): `flowleap auth create-token --name <n> --store` mints a revocable `fl_pat_…` token (list with `auth tokens`, revoke with `auth revoke-token`)
-3. **Environment variables**: `FLOWLEAP_API_KEY` (an `fl_pat_…` token) or `FLOWLEAP_TOKEN`
-
-Patent providers may also need your own keys (EPO OPS, USPTO ODP) — run `flowleap setup` or see `flowleap keys --help`.
-
-Credentials are stored in `~/.config/flowleap/credentials.toml` (mode 0600).
+### Codex
 
 ```bash
-# Check auth status
-flowleap auth status
+flowleap skills install --target codex    # marked block in ./AGENTS.md
+```
 
-# Clear all credentials (including provider keys)
-flowleap auth logout
+MCP server — add to `~/.codex/config.toml`:
 
-# Clear only the OAuth session token (keep API key + provider keys)
-flowleap auth logout --session-only
+```toml
+[mcp_servers.flowleap]
+command = "flowleap"
+args = ["mcp"]
+```
+
+### Cursor
+
+```bash
+flowleap skills install --target cursor   # ./.cursor/rules/flowleap.mdc
+```
+
+MCP server — add to `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):
+
+```json
+{
+  "mcpServers": {
+    "flowleap": { "command": "flowleap", "args": ["mcp"] }
+  }
+}
+```
+
+### Gemini CLI
+
+```bash
+flowleap skills install --target gemini   # marked block in ./GEMINI.md
+```
+
+Any other MCP-capable harness works the same way: run `flowleap` with the single argument `mcp` as a stdio server.
+
+After upgrading the CLI, refresh every recorded skill install in one go:
+
+```bash
+flowleap skills update
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `doctor` | Check config, auth, and backend reachability |
-| `health` | Public backend health probes |
-| `api request` | Raw authenticated API escape hatch |
-| `auth login/logout/status` | Manage authentication |
-| `patent search` | Search patents (EPO/USPTO) |
-| `patent build-query` | Natural language → CQL query |
-| `uspto` | USPTO ODP search, grants, applications, continuity, query builder |
-| `ops` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |
-| `academic search` | Search academic literature |
-| `npl` | Search non-patent literature |
-| `legal` | Search patent-law documents |
-| `citation` | Search USPTO citation/prior-art data |
+| `doctor` | Check CLI config, auth, and backend reachability |
+| `setup` | Interactive onboarding: backend check, auth, provider keys (human-only) |
+| `keys` | Manage patent-provider keys (EPO OPS, USPTO ODP): set, list, test, rm |
+| `init` | Store initial CLI configuration (base URL) |
+| `auth` | Login (OAuth device flow), logout, status, personal API tokens |
+| `api` | Profile, usage, and the raw authenticated API escape hatch |
+| `health` | Public backend health probes (api, cache, redis, …) |
+| `patent` | Search patents (EPO) and build CQL queries from natural language |
+| `ops` | Direct EPO OPS data: search, biblio, claims, description, family, legal, abstract |
+| `uspto` | USPTO Open Data Portal: search, grants, applications, continuity, query builder |
+| `academic` | Search academic literature (Semantic Scholar, arXiv) |
+| `npl` | Search non-patent literature (OpenAlex) |
+| `legal` | Search patent-law reference documents (EPC, EPO Guidelines, MPEP, …) |
+| `citation` | USPTO enriched citation data: search, forward, stats, novelty |
+| `analytics` | Full-corpus patent analytics (filing trends, countries, assignees, CPC) |
+| `ocr` | Extract text from a PDF, image, or document via OCR (file or URL) |
+| `analyze-claim` | Analyze a patent claim: keywords, IPC codes, search queries, elements |
+| `compare` | Compare 2–10 patents side by side (bibliography) |
+| `figures` | List a patent's drawings/figures; save image data with `--out` |
+| `summary` | One-call patent snapshot: bibliography, legal status, family, term |
+| `timeline` | Chronological prosecution timeline for a patent |
+| `convert-number` | Convert a patent number between formats (epodoc, docdb, original) |
+| `tools` | Discover and run backend tools (agent-first `/v1/tools` facade) |
+| `mcp` | Serve backend tools over the Model Context Protocol (stdio) |
+| `skills` | List, install, and update bundled agent skills (multi-harness) |
 | `config` | Manage CLI configuration |
 
-## Configuration
-
-Configuration is stored in `~/.config/flowleap/config.toml`.
+A sampler:
 
 ```bash
-# Set base URL
-flowleap config set base-url https://api.flowleap.co
+# Patents
+flowleap patent search --query "lithium battery recycling" --limit 5
+flowleap patent build-query "patents about lithium battery recycling filed by Tesla" --dry-run
+flowleap uspto search --query "wireless charging" --limit 3
+flowleap uspto grant 11800000
+flowleap ops biblio EP1234567
+flowleap ops claims EP1234567 --lang en
 
-# Read a config value
-flowleap config get base-url
+# One-call verbs
+flowleap summary EP1000000
+flowleap timeline EP1000000
+flowleap compare EP1000000 US5443036
+flowleap figures EP1000000 --out fig1.png
+flowleap convert-number US5443036.A --to epodoc
+
+# Literature, law, citations, analytics
+flowleap academic search "machine learning patent classification"
+flowleap npl "battery thermal management" --limit 10
+flowleap legal search "doctrine of equivalents" --limit 10
+flowleap citation search 16000001 --size 20
+flowleap analytics --keyword battery --country US --date-from 2020-01-01
+
+# Documents and claims
+flowleap ocr ./office-action.pdf > office-action.md
+flowleap analyze-claim --file claim1.txt --focus search
+
+# Agent-first tool facade (same registry the MCP server mirrors)
+flowleap tools list
+flowleap tools describe get_patent_summary
+flowleap tools run search_patents --input '{"query":"ti=solar","limit":3}'
+
+# Raw API escape hatch — only when a high-level command is missing
+flowleap --json api request get /v1/health
+flowleap --json api request post /v1/patent-search --body-file request.json --dry-run
 ```
 
-### Config Precedence
+## Installation
 
-CLI flags > environment variables > config file
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `FLOWLEAP_API_KEY` | API key for authentication |
-| `FLOWLEAP_TOKEN` | Bearer token for authentication |
-| `FLOWLEAP_BASE_URL` | API base URL |
-| `FLOWLEAP_NO_UPDATE_CHECK` | Disable the once-a-day update notice (it is already skipped for `--json`, `--dry-run`, and non-TTY runs) |
-
-## Global Flags
-
-```
---json              Emit stable machine-readable JSON
---output <format>   Output format: json, table, human (default: human)
---base-url <url>    Override API base URL
---api-key <key>     Override stored API key
---token <token>     Override stored token
---dry-run           Show request details without executing
---verbose, -v       Show verbose request/response details
-```
-
-## AI Agent Integration
-
-The repo ships Agent Skills (`SKILL.md` files) — one for every CLI command, plus personas and multi-step recipes. Skills are structured Markdown files that any LLM can read natively. They are baked into the binary, so `flowleap skills install` works anywhere.
-
-### Installing Skills Per Harness
+**npm / pnpm / yarn:**
 
 ```bash
-flowleap skills install                    # Claude Code (user): ~/.claude/skills
-flowleap skills install --target claude-project   # Claude Code (project): ./.claude/skills
-flowleap skills install --target codex     # Codex: marked block in ./AGENTS.md
-flowleap skills install --target cursor    # Cursor: ./.cursor/rules/flowleap.mdc
-flowleap skills install --target gemini    # Gemini CLI: marked block in ./GEMINI.md
-flowleap skills install --dir <path>       # Raw SKILL.md copy anywhere
+npm i -g flowleap
 ```
 
-Claude targets copy the full SKILL.md directories; the other targets render a condensed agent-rules document (command reference + workflow triggers) generated from the same embedded skill content — the file each harness actually auto-loads.
+The npm package has no install scripts. The native binary is downloaded on first run from the matching GitHub release, verified against the release's sha256 `checksums.txt` before it executes, and the package is published with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) attesting the exact repo, commit, and CI run that built it.
 
-Every install is stamped with the CLI version and recorded in the config file. After upgrading the CLI, refresh all recorded installs in one go:
+**Shell installer (macOS / Linux):**
 
 ```bash
-flowleap skills update
+curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
 ```
 
-The daily update notice also warns when installed skills are stale (rendered by an older CLI version).
+The script detects your platform, downloads the latest release binary, and verifies its sha256 against the release's `checksums.txt` before installing to `/usr/local/bin`.
 
-### Skill Categories
+**From source (requires Rust):**
+
+```bash
+cargo install --git https://github.com/abdullahatrash/flowleap-cli.git
+```
+
+Prebuilt release binaries cover macOS (x86_64, arm64), Linux (x86_64 and arm64 glibc, plus a static `flowleap-linux-x86_64-musl` build for Alpine/containers — download it directly from the [releases page](https://github.com/abdullahatrash/flowleap-cli/releases)), and Windows (x86_64).
+
+## Authentication
+
+Every authenticated request sends `Authorization: Bearer <credential>`. Three ways to supply one:
+
+1. **OAuth 2.0 device flow** (recommended for humans): `flowleap auth login` prints a device code and opens your browser to approve it.
+2. **Personal API token** (recommended for agents/CI): `flowleap auth create-token --name my-agent --store` mints a revocable `fl_pat_…` token. List with `flowleap auth tokens`, revoke with `flowleap auth revoke-token <id>`.
+3. **Environment variables**: `FLOWLEAP_API_KEY` (an `fl_pat_…` token) or `FLOWLEAP_TOKEN`.
+
+Credentials are stored in `~/.config/flowleap/credentials.toml` (mode 0600).
+
+```bash
+flowleap auth status                  # what credential is active, and where from
+flowleap auth logout                  # clear everything, including provider keys
+flowleap auth logout --session-only   # keep API key + provider keys
+```
+
+### CI / Headless Use
+
+Mint a token once on your machine, then export it wherever the CLI runs:
+
+```bash
+# once, interactively (token creation requires an OAuth session, not an API token)
+flowleap auth login
+flowleap auth create-token --name ci-agent
+
+# in CI: export the fl_pat_… token
+export FLOWLEAP_API_KEY="fl_pat_..."
+flowleap --json patent search --query "battery cooling" --limit 3
+```
+
+Headless notes:
+
+- `--yes` (or `FLOWLEAP_ASSUME_YES=1`) skips confirmation prompts, e.g. the credential guard that fires when `--base-url` points at a non-FlowLeap host. Non-TTY, `--json`, and `--dry-run` runs are never blocked on a prompt.
+- Provider keys can come from env too: `FLOWLEAP_EPO_KEY`, `FLOWLEAP_EPO_SECRET`, `FLOWLEAP_USPTO_KEY`.
+- API tokens cannot mint further tokens (backend-enforced).
+
+## JSON Output & Exit Codes
+
+Add `--json` (or `--output json`) for stable machine-readable output — recommended for all agent and script use. Success responses carry the command's data; failures print a JSON error envelope on stdout:
+
+```json
+{ "ok": false, "error": { "message": "…" } }
+```
+
+Envelopes may carry additive structured hints: `subscriptionHint` (402 — upgrade URL, needs a human), `providerKeysHint` (missing/rejected EPO or USPTO keys — needs a human, do not retry), and `rateLimitHint` (429 — wait `retryAfterSeconds`, then retry). Human/table output renders the same hints as info boxes on stderr.
+
+Every run exits with a documented code, so scripts can branch on `$?` without parsing JSON:
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Generic failure |
+| 2 | Usage error (bad flags/arguments) |
+| 3 | Auth required (HTTP 401) — `flowleap auth login` or set `FLOWLEAP_API_KEY` |
+| 4 | Subscription required (HTTP 402) — see `subscriptionHint` |
+| 5 | Not found (HTTP 404) |
+| 6 | Rate limited (HTTP 429) — back off, see `rateLimitHint` |
+| 7 | Network failure reaching the backend |
+
+Use `--dry-run` to see the exact method, URL, auth status, and JSON body the CLI would send — the safest way to debug request shape:
+
+```bash
+flowleap --json patent search --query "battery cooling system" --limit 1 --dry-run
+```
+
+The full contract (hint schemas, endpoint list, agent protocol) lives in [AGENTS.md](AGENTS.md).
+
+## Cookbook: Recipe Skills
+
+The CLI bundles 12 multi-step workflow recipes (`recipe-*` skills). Install them with `flowleap skills install` and your agent can run each end to end:
+
+| Recipe | What it does |
+|--------|--------------|
+| `recipe-prior-art-search` | Comprehensive prior art search: query generation, dual EPO/USPTO search, academic sweep, deep dives on closest hits |
+| `recipe-patent-landscape` | Map a technology area: scoped searches, key players, recent activity, full-corpus filing analytics |
+| `recipe-freedom-to-operate` | FTO/clearance search: per-feature queries, blocking-patent search, legal-status and claims checks |
+| `recipe-claim-analysis` | Extract and analyze a patent's claims with full context and element decomposition |
+| `recipe-patent-to-report` | Extract everything about one patent into a structured report (dossier) |
+| `recipe-academic-literature-review` | Technology review combining scholarly literature and a matching patent sweep |
+| `recipe-invention-disclosure` | Turn an inventor conversation into a complete invention disclosure form with novelty pre-check |
+| `recipe-claim-drafting` | Draft claims grounded in the closest prior art and checked against MPEP/EPO formal rules |
+| `recipe-office-action-response` | OCR an office action, pull cited references, map rejections, ground arguments in guidelines |
+| `recipe-invalidity-analysis` | Build a prior-art invalidity case: priority date, element hunt, X/Y/A invalidity chart |
+| `recipe-infringement-charting` | Element-by-element infringement claim chart against an accused product |
+| `recipe-audit-report` | Auditable record of AI-assisted research: command log, provenance, AI-usage disclosure |
+
+## Skills Reference
+
+28 skills ship embedded in the binary — `flowleap skills list` shows them, `flowleap skills install` works offline anywhere. Three categories:
 
 | Category | Description |
 |----------|-------------|
-| **Service skills** (`flowleap-*`) | One per CLI command (patent, ops, etc.) |
-| **Persona skills** (`persona-*`) | Role-based bundles (patent attorney, researcher, etc.) |
-| **Recipe skills** (`recipe-*`) | Multi-step workflows (prior art search, FTO analysis, etc.) |
-
-### Skills Directory
+| **Service skills** (`flowleap-*`) | One per CLI capability (patent, ops, uspto, …) |
+| **Persona skills** (`persona-*`) | Role-based bundles (patent attorney, IP analyst, researcher, startup founder) |
+| **Recipe skills** (`recipe-*`) | Multi-step workflows (see Cookbook above) |
 
 ```
 skills/                            # 28 skills, embedded in the binary
@@ -246,54 +325,57 @@ skills/                            # 28 skills, embedded in the binary
   recipe-audit-report/SKILL.md              # governance
 ```
 
-### Agent-Friendly Output
+Claude targets copy the full SKILL.md directories; the codex/cursor/gemini targets render a condensed agent-rules document (command reference + workflow triggers) generated from the same embedded content — the file each harness actually auto-loads. Every install is stamped with the CLI version and recorded in the config file; the daily update notice warns when installed skills are stale, and `flowleap skills update` refreshes them.
 
-Always use `--output json` when integrating with AI agents for reliable parsing:
+Every `flowleap` example inside the embedded skills — and this README — is parse-checked against the real CLI in the test suite, so documentation cannot drift from the commands it documents.
 
-```bash
-flowleap --json doctor
-flowleap --json patent search --query "solar panel"
-flowleap --json ops claims EP1234567
-```
+## Configuration
 
-For local backend development:
+Configuration is stored in `~/.config/flowleap/config.toml`.
 
 ```bash
-flowleap --json doctor --base-url http://localhost:8000
-flowleap --json health cache --base-url http://localhost:8000
+flowleap config set base-url https://api.flowleap.co
+flowleap config get base-url
 ```
 
-Use `api request` only when a high-level command is missing:
+Precedence: CLI flags > environment variables > config file.
 
-```bash
-flowleap --json api request get /v1/health
-flowleap --json api request post /v1/patent-search --body '{"query":"solar","limit":1}' --dry-run
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `FLOWLEAP_API_KEY` | API key for authentication (an `fl_pat_…` token) |
+| `FLOWLEAP_TOKEN` | Bearer token for authentication |
+| `FLOWLEAP_BASE_URL` | API base URL override |
+| `FLOWLEAP_EPO_KEY` / `FLOWLEAP_EPO_SECRET` | EPO OPS provider key pair |
+| `FLOWLEAP_USPTO_KEY` | USPTO ODP provider key |
+| `FLOWLEAP_ASSUME_YES` | Skip confirmation prompts (same as `--yes`) |
+| `FLOWLEAP_NO_UPDATE_CHECK` | Disable the once-a-day update notice (already skipped for `--json`, `--dry-run`, and non-TTY runs) |
+
+### Global Flags
+
 ```
-
-### AI Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `CLAUDE.md` | Entry point for Claude Code |
-| `AGENTS.md` | Architecture and contribution guide for AI agents |
-| `.claude/settings.json` | Claude Code configuration |
+--json              Emit stable machine-readable JSON
+--output <format>   Output format: json, table, human (default: human)
+--base-url <url>    Override API base URL
+--api-key <key>     Override stored API key
+--token <token>     Override stored token
+--dry-run           Show request details without executing
+--yes               Assume "yes" for confirmation prompts
+--verbose, -v       Show verbose request/response details
+```
 
 ## Development
 
 ```bash
-# Build
-cargo build
-
-# Run tests
-cargo test
-
-# Lint
-cargo clippy
-
-# Format
-cargo fmt
+cargo build     # Build
+cargo test      # Run tests (includes skill + README example validation)
+cargo clippy    # Lint
+cargo fmt       # Format
 ```
+
+Architecture, endpoint list, exit-code contract, and agent protocol: [AGENTS.md](AGENTS.md). Entry point for Claude Code: [CLAUDE.md](CLAUDE.md).
 
 ## License
 
-MIT
+[MIT](LICENSE) — Copyright (c) 2026 FlowLeap.
