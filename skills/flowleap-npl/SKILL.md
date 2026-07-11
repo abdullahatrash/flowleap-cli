@@ -5,6 +5,8 @@ description: Search non-patent literature (scholarly works via OpenAlex) with ye
 
 # FlowLeap NPL Search (OpenAlex)
 
+Auth and global flags: see `flowleap-shared`.
+
 ```bash
 flowleap --json npl "perovskite solar cell stability" --limit 5
 flowleap --json npl "CRISPR delivery" --from-year 2020 --to-year 2024 --open-access

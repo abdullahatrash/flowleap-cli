@@ -5,6 +5,8 @@ description: USPTO enriched citation data from office actions — citations by a
 
 # FlowLeap Citation Search (USPTO enriched citations)
 
+Auth and global flags: see `flowleap-shared`.
+
 ## By application
 
 ```bash

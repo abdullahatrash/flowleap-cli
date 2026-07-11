@@ -1,14 +1,19 @@
 ---
 name: recipe-academic-literature-review
-description: Recipe for a technology review combining academic literature and patent data — scholarly search across Semantic Scholar, arXiv, and OpenAlex plus a matching patent sweep. Trigger when the user asks for a literature review, a state-of-the-art survey, or a comparison of published research against filed patents.
+description: Map the gap between published research and filed patents — a scholarly sweep across Semantic Scholar, arXiv, and OpenAlex aligned against a matching patent search, output centered on the published-versus-protected gap rather than a ranked novelty list. Trigger when the user asks for a literature review, a state-of-the-art survey, or a comparison of academic research against patents.
 metadata:
   requires:
-    skills: ["flowleap-shared", "flowleap-academic", "flowleap-patent"]
+    skills: ["flowleap-shared", "flowleap-academic", "flowleap-npl", "flowleap-patent"]
 ---
 
 # Recipe: Academic Literature Review
 
-Combine academic and patent searches for a comprehensive technology review.
+Combine academic and patent searches to map what a field has published against
+what it has protected.
+
+Prefer `academic` (Semantic Scholar + arXiv) for CS/ML papers and preprints;
+prefer `npl` (OpenAlex) for broad cross-disciplinary journal coverage and
+open-access filtering.
 
 ## Steps
 
@@ -29,12 +34,18 @@ flowleap --json npl "<research topic>" --from-year 2020 --limit 10
 
 ```bash
 flowleap patent build-query "<research topic>"
-flowleap --json patent search --query "<generated CQL>" --limit 20
+flowleap --json patent search --query "<CQL from build-query>" --limit 20
 ```
+
+### Step 4: Synthesize the Gap
+
+Align the academic themes against the patent CPC and assignee clusters. Flag
+topics heavily published but lightly patented (open R&D space) and topics
+heavily patented but lightly published (crowded IP). Done when each major theme
+is classified on the published-versus-protected axis.
 
 ## Output
 
-Combined dataset of:
 - Academic papers (title, authors, year, source, citation counts)
-- Related patents (publication number, title, applicant, date)
-- The gap between what is published and what is protected
+- Related patents (publication number, title, applicant, date, CPC)
+- A published-versus-protected map: themes tagged as open R&D space or crowded IP
