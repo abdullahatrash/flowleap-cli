@@ -1,31 +1,36 @@
 ---
 name: recipe-patent-landscape
-description: Recipe for patent landscape analysis of a technology area — scoped searches, key-player identification, recent-activity checks, and full-corpus filing analytics. Trigger when the user asks to map a technology space, identify who patents in an area, or report filing trends and white space.
+description: Patent-landscape analysis for a technology area — scoped dual-database search, key-player identification, full-corpus filing analytics, and CPC-versus-year white-space detection. Trigger when the user asks to map a technology space, identify who patents in an area, or report filing trends and white space.
 metadata:
   requires:
-    skills: ["flowleap-shared", "flowleap-patent", "flowleap-ops"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-uspto", "flowleap-ops"]
 ---
 
 # Recipe: Patent Landscape Analysis
 
-Map the patent landscape for a technology area, identifying key players and trends.
+Map the patent landscape for a technology area, identifying key players, trends,
+and gaps. Each database uses its own query syntax — see `flowleap-uspto` for the
+USPTO Lucene grammar.
 
 ## Steps
 
 ### Step 1: Define Search Scope
 
 ```bash
-# Generate CQL for the technology area
 flowleap patent build-query "<technology description>"
+flowleap uspto build-query "<technology description>"
 ```
+
+Done when you have an EPO CQL query and a USPTO ODP query for the area.
 
 ### Step 2: Broad Patent Search
 
 ```bash
-# Search both databases
-flowleap --json patent search --query "<CQL>" --limit 50
-flowleap --json uspto search --query "<CQL>" --limit 50   # USPTO uses ODP Lucene syntax, not CQL
+flowleap --json patent search --query "<CQL from step 1>" --limit 50
+flowleap --json uspto search --query "<recommended_query from step 1>" --limit 50
 ```
+
+Done when both databases have returned their result sets.
 
 ### Step 3: Corpus Analytics
 
@@ -37,21 +42,34 @@ flowleap --json analytics --cpc <cpc-prefix> --country US --date-from 2020-01-01
 
 ### Step 4: Identify Key Players
 
+Build applicant-scoped queries rather than hand-writing CQL — see `flowleap-patent`
+for the CQL fields (`pa=` applicant, `ti=` title):
+
 ```bash
-# Search top applicants individually
-flowleap --json patent search --query "pa=<company1> AND ti=<technology>"
-flowleap --json patent search --query "pa=<company2> AND ti=<technology>"
+flowleap patent build-query "<top assignee> patents in <technology>"
+flowleap --json patent search --query "<CQL from build-query>" --limit 30
 ```
 
 ### Step 5: Check Recent Activity
 
+`patent search` returns relevance-ranked hits; `ops search --cql` adds CQL
+date-range filtering (`pd>=2024`) for a time-sliced view the ranked search does
+not expose:
+
 ```bash
-# Recent filings using CQL date filters
 flowleap ops search --cql "ti=<technology> AND pd>=2024" --start 1 --end 50
 ```
 
+### Step 6: Flag White Space
+
+Cross the analytics CPC breakdown against the filing-year trend to flag subclasses
+that are sparse or declining while neighbours grow. Done when at least one
+sparse/declining CPC subclass (or a confirmed absence) is identified.
+
 ## Output
 
-A dataset of patent results segmented by database, applicant, and filing date,
-plus corpus-level trend charts (filings per year, top assignees, CPC and
-country distributions) for landscape analysis.
+A dataset segmented by database, applicant, and filing date, plus corpus-level
+trend charts (filings per year, top assignees, CPC and country distributions).
+When tallying players or counts from the search results, collapse to one entry
+per patent **family** so multi-jurisdiction filings are not double-counted; the
+corpus `analytics` figures are aggregate backend counts, reported as returned.

@@ -5,6 +5,8 @@ description: Hybrid semantic/keyword search over patent-law reference documents 
 
 # FlowLeap Legal Search (patent-law RAG)
 
+Auth and global flags: see `flowleap-shared`.
+
 ## Search
 
 ```bash

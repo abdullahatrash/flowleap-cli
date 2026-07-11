@@ -1,6 +1,6 @@
 ---
 name: recipe-patent-to-report
-description: Recipe for extracting everything about one patent into a structured report — bibliography, abstract, claims, description, family, legal status, prosecution timeline, figures, and related art. Trigger when the user asks for a complete profile, dossier, or report on a specific patent.
+description: Formatted single-patent dossier — pull bibliography, abstract, claims, description, family, legal status, prosecution timeline, figures, and related art into one structured Markdown report. Trigger when the user asks for a complete profile, dossier, or report on a specific patent.
 metadata:
   requires:
     skills: ["flowleap-shared", "flowleap-ops", "flowleap-patent"]
@@ -8,7 +8,8 @@ metadata:
 
 # Recipe: Patent to Report
 
-Extract all data from a patent document for structured analysis.
+Extract all data from a patent document and assemble it into one structured
+report.
 
 ## Steps
 
@@ -37,16 +38,20 @@ flowleap figures <patent-number> --out figure.png --page 3  # save one page
 ### Step 4: Find Related Patents
 
 ```bash
-# Search for related patents using key terms from the abstract
 flowleap --json patent search --query "<key terms from abstract>" --limit 10
 ```
 
 ## Output
 
-Complete patent data package including:
-- Bibliographic data (title, applicant, dates, classification)
-- Legal status, family members, and estimated term
-- Prosecution timeline (register + INPADOC legal events)
-- Abstract, description, and full claims text
-- Drawings/figures
-- Related patents in the same field
+A Markdown dossier for the patent with one section per heading below. Done when
+every section is present (or explicitly marked "not available"):
+
+- **Bibliography** — title, applicant/inventor, filing and publication dates, classification
+- **Abstract**
+- **Claims** — independent and dependent
+- **Description summary** — condensed from the full description
+- **Figures** — figure list, with saved pages referenced
+- **Family** — members by jurisdiction
+- **Legal status** — active/expired/abandoned and estimated remaining term
+- **Prosecution timeline** — register + INPADOC legal events
+- **Related art** — patents surfaced from the abstract key terms

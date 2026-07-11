@@ -5,6 +5,8 @@ description: Search USPTO Open Data Portal records with Lucene queries, fetch gr
 
 # FlowLeap USPTO (Open Data Portal)
 
+Auth and global flags: see `flowleap-shared`.
+
 ## Search
 
 ODP uses Lucene syntax over application metadata (get the grammar via

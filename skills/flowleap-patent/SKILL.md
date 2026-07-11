@@ -31,14 +31,14 @@ For US-specific searches use `flowleap uspto search` (ODP Lucene syntax).
 # Basic search
 flowleap patent search --query "solar panel efficiency"
 
-# USPTO source with limit
-flowleap uspto search --query "lithium battery" --limit 20   # USPTO uses ODP Lucene syntax, not CQL
-
 # JSON output for agents
 flowleap patent search --query "CRISPR gene editing" --json
 ```
 
 #### Response Format (JSON)
+
+Returns an array of results, each carrying a document identifier, title,
+applicant(s), publication date, and abstract, for example:
 
 ```json
 [
@@ -51,6 +51,10 @@ flowleap patent search --query "CRISPR gene editing" --json
   }
 ]
 ```
+
+Field names are illustrative — inspect a live `--json` response for the exact
+keys. Strip the kind suffix (`EP1234567.A1` → `EP1234567`) to use the document
+identifier as the `<patent-number>` argument to `ops` and the tools facade.
 
 ### Build CQL Query
 

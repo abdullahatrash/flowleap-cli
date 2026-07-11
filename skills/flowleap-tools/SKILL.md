@@ -74,14 +74,4 @@ flowleap --json tools run search_patents --input "{\"query\": \"<recommended_cql
 
 ## Auth
 
-Requires a personal API token (`fl_pat_…`) or OAuth login:
-
-```bash
-flowleap auth login                      # OAuth device flow (browser)
-flowleap auth create-token --name my-agent --store   # mint + store fl_pat_ token
-export FLOWLEAP_API_KEY=fl_pat_...       # or pass via env for headless use
-```
-
-All patent tools require an active FlowLeap subscription (402
-`subscription_required` with an `upgradeUrl` otherwise) and share a
-60 requests/minute per-user rate limit (429 + `retryAfterSeconds`).
+Auth, subscription, and rate limits: see `flowleap-shared`.

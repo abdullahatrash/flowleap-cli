@@ -1,6 +1,6 @@
 ---
 name: flowleap-ops
-description: Direct EPO Open Patent Services access through the FlowLeap backend — CQL search plus per-document bibliography, claims, description, family, legal status, and abstract. Trigger when an agent needs authoritative EPO document data for a known publication number, full claims or description text, family members, legal-status events, or a raw OPS CQL search.
+description: Direct EPO Open Patent Services access through the FlowLeap backend — CQL search plus per-document bibliography, claims, description, family, legal status, and abstract. Trigger when an agent needs authoritative EPO document data for a known publication number, full claims or description text, family members, legal-status events, or a raw OPS CQL search. For query-building or ranked discovery use flowleap-patent; use OPS for authoritative per-document data.
 ---
 
 # FlowLeap OPS

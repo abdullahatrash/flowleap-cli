@@ -15,38 +15,14 @@ Every authenticated request sends `Authorization: Bearer <credential>` — eithe
 a session JWT from the OAuth device flow or a long-lived personal API token
 (`fl_pat_…`).
 
-```bash
-# OAuth 2.0 device flow: prints a user code + verification URL, opens the
-# browser, and polls until the login is approved
-flowleap auth login
-
-# Store a personal API token directly
-flowleap auth login --api-key fl_pat_your_token_here
-
-# Store a session token directly
-flowleap auth login --token eyJhbGci...
-
-# Mint a long-lived fl_pat_ token for headless/agent use (shown once)
-flowleap auth create-token --name my-agent --store
-
-# Check status
-flowleap auth status
-
-# Clear all credentials (including EPO/USPTO provider keys)
-flowleap auth logout
-
-# Clear only the OAuth session token (keep API key + provider keys)
-flowleap auth logout --session-only
-```
-
 Environment variable overrides (highest priority):
 - `FLOWLEAP_API_KEY` — personal API token (`fl_pat_…`)
 - `FLOWLEAP_TOKEN` — Bearer token
 - `FLOWLEAP_BASE_URL` — API base URL
 
-Full auth details (token listing/revocation, 401 self-heal): the
-`flowleap-auth` skill. Patent-provider keys (EPO OPS / USPTO ODP BYOK): the
-`flowleap-keys` skill.
+The login, token minting/listing/revocation, and 401 self-heal commands live in
+`flowleap-auth`. Patent-provider keys (EPO OPS / USPTO ODP BYOK) live in
+`flowleap-keys`.
 
 ## Global Flags
 
@@ -81,6 +57,26 @@ CLI flags > environment variables > config file
 - `--output human` — Human-readable text (default)
 
 When using FlowLeap as an AI agent, always pass `--json` for reliable parsing.
+
+## Subscription, Rate Limits & Exit Codes
+
+All `/v1` data routes require an active subscription and share a limit of
+60 requests/minute/user. `doctor`, `health`, `auth`, and `keys test` work
+without a subscription, so setup can always be diagnosed. Error envelopes carry
+additive hints — `subscriptionHint` (402, has `upgradeUrl`, needs a human),
+`providerKeysHint` (missing/rejected EPO/USPTO keys, needs a human), and
+`rateLimitHint` (429, has `retryAfterSeconds`).
+
+| Exit code | Meaning |
+|-----------|---------|
+| 0 | Success |
+| 1 | Generic failure |
+| 2 | Usage error (bad flags/arguments) |
+| 3 | Auth required (HTTP 401) — log in or set `FLOWLEAP_API_KEY` |
+| 4 | Subscription required (HTTP 402) — surface `subscriptionHint.upgradeUrl` to a human |
+| 5 | Not found (HTTP 404) |
+| 6 | Rate limited (HTTP 429) — back off per `rateLimitHint.retryAfterSeconds` |
+| 7 | Network failure reaching the backend |
 
 ## Safety
 
