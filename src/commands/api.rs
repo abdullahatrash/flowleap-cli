@@ -17,7 +17,7 @@ pub struct ApiArgs {
 enum ApiCommand {
     /// Get the authenticated user profile
     Profile,
-    /// Get authenticated usage information
+    /// Get usage analytics (investigations, searches, citations, claims)
     Usage,
     /// Raw API request using configured base URL and auth
     Request {
@@ -49,7 +49,8 @@ enum HttpMethod {
 pub async fn run(ctx: &Context, args: ApiArgs) -> Result<()> {
     match args.command {
         ApiCommand::Profile => get(ctx, "/api/profile").await,
-        ApiCommand::Usage => get(ctx, "/api/usage").await,
+        // The backend never shipped /api/usage; /api/analytics is its usage-metrics endpoint.
+        ApiCommand::Usage => get(ctx, "/api/analytics").await,
         ApiCommand::Request {
             method,
             path,
