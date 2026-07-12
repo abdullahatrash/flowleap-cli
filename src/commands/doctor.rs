@@ -69,6 +69,7 @@ pub async fn run(ctx: &Context) -> Result<()> {
             "errorKind": error_kind,
             "hint": hint,
         },
+        "skills": crate::commands::skills::doctor_skills_status(env!("CARGO_PKG_VERSION")),
     });
 
     output::print_value(&ctx.output_format, &report, &[]);

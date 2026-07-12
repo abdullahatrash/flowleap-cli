@@ -135,13 +135,74 @@ fn dir_target_copies_skills_and_stamps_version() {
     ]);
 
     assert!(dir.join("flowleap/SKILL.md").is_file());
-    assert_eq!(
-        read(&dir.join(".flowleap-cli-version")),
-        format!("{}\n", VERSION)
+    let manifest = read(&dir.join(".flowleap-skills-manifest.json"));
+    assert!(
+        manifest.contains(&format!("\"cliVersion\": \"{}\"", VERSION)),
+        "manifest: {}",
+        manifest
     );
+    assert!(manifest.contains("\"flowleap\""), "manifest: {}", manifest);
     let config = read(&sandbox.config_path());
     assert!(config.contains("target = \"dir\""));
     assert!(config.contains("skills = [\"flowleap\"]"));
+}
+
+#[test]
+fn reinstall_protects_user_edited_skills() {
+    let sandbox = Sandbox::new();
+    let dir = sandbox.cwd_file("agent-skills");
+    let dir_arg = dir.to_str().unwrap();
+    sandbox.run_ok(&["skills", "install", "--dir", dir_arg, "--json", "flowleap"]);
+
+    let skill_md = dir.join("flowleap/SKILL.md");
+    std::fs::write(&skill_md, "user edits\n").unwrap();
+
+    // Re-running install must not clobber the hand edit.
+    let stdout = sandbox.run_ok(&["skills", "install", "--dir", dir_arg, "--json", "flowleap"]);
+    assert!(stdout.contains("\"skipped\""), "stdout: {}", stdout);
+    let skipped_flowleap = stdout.contains("flowleap") && stdout.contains("--force");
+    assert!(skipped_flowleap, "expected a --force hint, got: {}", stdout);
+    assert_eq!(read(&skill_md), "user edits\n");
+
+    // --force overwrites the edit with the bundled content.
+    sandbox.run_ok(&[
+        "skills", "install", "--dir", dir_arg, "--force", "--json", "flowleap",
+    ]);
+    assert_ne!(read(&skill_md), "user edits\n");
+    assert!(read(&skill_md).contains("FlowLeap"));
+}
+
+#[test]
+fn doctor_reports_recorded_skill_installs() {
+    let sandbox = Sandbox::new();
+    let dir = sandbox.cwd_file("agent-skills");
+    sandbox.run_ok(&[
+        "skills",
+        "install",
+        "--dir",
+        dir.to_str().unwrap(),
+        "--json",
+        "flowleap",
+    ]);
+
+    // doctor pings the backend; point it at a closed port so it fails fast and
+    // we only exercise the offline-computed skills section.
+    let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
+        .current_dir(sandbox.cwd.path())
+        .env("HOME", sandbox.home.path())
+        .env("XDG_CONFIG_HOME", sandbox.home.path().join("xdg"))
+        .env("FLOWLEAP_BASE_URL", "http://127.0.0.1:9")
+        .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
+        .args(["--json", "doctor"])
+        .output()
+        .expect("run doctor");
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(stdout.contains("\"skills\""), "doctor json: {}", stdout);
+    assert!(
+        stdout.contains("\"recorded\": 1"),
+        "doctor json: {}",
+        stdout
+    );
 }
 
 #[test]

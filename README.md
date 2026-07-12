@@ -107,6 +107,28 @@ After upgrading the CLI, refresh every recorded skill install in one go:
 flowleap skills update
 ```
 
+### Keeping skills fresh (and which channel to use)
+
+**User-scope skills win.** In Claude-family harnesses, a skill in `~/.claude/skills`
+(or a project's `.claude/skills`) *shadows* a same-named skill provided by a plugin
+or marketplace pack — the user copy is loaded and the packaged one is ignored, even
+when the packaged one is newer. So a one-time `flowleap skills install` can silently
+pin you to a stale copy of a skill while the packaged version moves on.
+
+To stay current:
+
+- **Pick one channel per machine.** Inside the FlowLeap IDE, prefer the marketplace
+  packs — they auto-update. Use `flowleap skills install` for other harnesses (Codex,
+  Cursor, Gemini CLI, or plain Claude Code) — don't run both for the same skills.
+- **Re-running install refreshes its own copies.** `flowleap skills install` compares
+  each installed skill against the bundled one via a content digest recorded in
+  `.flowleap-skills-manifest.json`: copies it wrote that you haven't touched are
+  refreshed in place; skills you've edited locally are left alone and reported (pass
+  `--force` to overwrite those too). Skills it never installed are never touched.
+- **Refresh everything after upgrading** with `flowleap skills update`, and check
+  status any time with `flowleap doctor` — its `skills` section flags installs made by
+  an older CLI.
+
 ## Commands
 
 | Command | Description |
@@ -331,7 +353,7 @@ skills/                            # 28 skills, embedded in the binary
   recipe-audit-report/SKILL.md              # governance
 ```
 
-Claude targets copy the full SKILL.md directories; the codex/cursor/gemini targets render a condensed agent-rules document (command reference + workflow triggers) generated from the same embedded content — the file each harness actually auto-loads. Every install is stamped with the CLI version and recorded in the config file; the daily update notice warns when installed skills are stale, and `flowleap skills update` refreshes them.
+Claude targets copy the full SKILL.md directories; the codex/cursor/gemini targets render a condensed agent-rules document (command reference + workflow triggers) generated from the same embedded content — the file each harness actually auto-loads. Every install is stamped with the CLI version and recorded in the config file, and copy targets also get a `.flowleap-skills-manifest.json` recording a content digest per skill. That digest lets a later install or `flowleap skills update` refresh the copies it wrote while leaving skills you've edited locally untouched (see "Keeping skills fresh" above). The daily update notice and `flowleap doctor` both flag installs made by an older CLI.
 
 Every `flowleap` example inside the embedded skills — and this README — is parse-checked against the real CLI in the test suite, so documentation cannot drift from the commands it documents.
 
