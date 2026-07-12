@@ -23,6 +23,8 @@ FlowLeap is a CLI for the FlowLeap Patent AI backend: patent/USPTO/OPS/academic/
 ```bash
 flowleap --json doctor
 flowleap skills install
+flowleap upgrade --check
+flowleap skills update
 ```
 
 #### flowleap-academic — Search academic literature (Semantic Scholar + arXiv) through the FlowLeap backend with per-source and publication-year filters.
@@ -102,6 +104,7 @@ flowleap patent build-query <description> [flags]
 ```bash
 flowleap config set base-url https://api.flowleap.co
 flowleap config get base-url
+flowleap upgrade --check --json
 ```
 
 #### flowleap-tools — Discover and run FlowLeap backend tools through the agent-first /v1/tools facade — one stable contract (search_patents, get_bibliography, get_claims, get_patent_summary, compare_patents, reference_search, …) instead of provider-specific endpoints.

@@ -78,6 +78,26 @@ additive hints — `subscriptionHint` (402, has `upgradeUrl`, needs a human),
 | 6 | Rate limited (HTTP 429) — back off per `rateLimitHint.retryAfterSeconds` |
 | 7 | Network failure reaching the backend |
 
+## Updating the CLI
+
+`flowleap upgrade` (alias `flowleap update`) updates the CLI itself, detecting
+the install channel from the running binary and acting accordingly: npm runs
+`npm i -g flowleap@latest`, Homebrew runs `brew upgrade flowleap`, an
+install.sh/raw binary self-updates in place (downloads the platform release
+asset, verifies its sha256 against `checksums.txt`, atomically swaps), and a
+cargo install prints the `cargo install --git … --force` command. `--check`
+(and `--json`/`--dry-run`) report `{ channel, currentVersion, latestVersion,
+updateAvailable, command }` with no side effects, so agents branch on the
+result. The daily update notice and `flowleap doctor` both point here.
+
+Upgrading the CLI does **not** refresh already-installed skill files — run
+`flowleap skills update` for that (see the `flowleap` umbrella skill).
+
+```bash
+flowleap upgrade --check --json
+flowleap upgrade
+```
+
 ## Safety
 
 - Use `--dry-run` before executing mutating operations

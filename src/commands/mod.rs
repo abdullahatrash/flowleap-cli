@@ -17,4 +17,5 @@ pub mod ops;
 pub mod patent;
 pub mod skills;
 pub mod tools;
+pub mod upgrade;
 pub mod uspto;

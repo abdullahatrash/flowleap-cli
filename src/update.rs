@@ -7,7 +7,7 @@
 //! notice is never worth breaking a command for.
 
 use std::io::IsTerminal;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -69,51 +69,23 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     }
 }
 
-/// How this binary was installed, which decides the upgrade command shown.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InstallChannel {
-    /// Installed via the npm wrapper package (`npm i -g flowleap`).
-    Npm,
-    /// Installed standalone (install.sh, cargo install, manual download).
-    Standalone,
+/// Latest version seen by the most recent daily check, if any. Read from the
+/// cached state only (never the network), so callers like `flowleap doctor`
+/// stay offline-safe. Empty/unknown yields None.
+pub fn cached_latest() -> Option<String> {
+    let latest = load_state().latest;
+    (!latest.is_empty()).then_some(latest)
 }
 
-/// Heuristic channel detection from the running binary's path. The npm
-/// wrapper downloads the native binary as `flowleap-native[.exe]`, either
-/// inside the package's `node_modules/.../bin` dir or in the per-user
-/// wrapper cache — so the file name or a `node_modules` path component
-/// both mean npm; anything else is a standalone install.
-fn detect_channel(exe: &Path) -> InstallChannel {
-    let npm_wrapper_name = exe
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .is_some_and(|stem| stem == "flowleap-native");
-    let in_node_modules = exe
-        .components()
-        .any(|component| component.as_os_str() == "node_modules");
-    if npm_wrapper_name || in_node_modules {
-        InstallChannel::Npm
-    } else {
-        InstallChannel::Standalone
-    }
-}
-
-fn upgrade_command(channel: InstallChannel) -> &'static str {
-    match channel {
-        InstallChannel::Npm => "npm i -g flowleap@latest",
-        InstallChannel::Standalone => {
-            "curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh"
-        }
-    }
-}
-
-fn notice(latest: &str, current: &str, channel: InstallChannel) -> Option<String> {
+/// The daily notice now points at the channel-aware `flowleap upgrade`
+/// command instead of a channel-specific instruction — one command upgrades
+/// every install channel (npm/brew/binary/cargo).
+fn notice(latest: &str, current: &str) -> Option<String> {
     if latest.is_empty() || !is_newer(latest, current) {
         return None;
     }
-    let upgrade = upgrade_command(channel);
     Some(format!(
-        "flowleap {latest} is available (you have {current}). Update: {upgrade}"
+        "flowleap {latest} is available (you have {current}). Update: flowleap upgrade"
     ))
 }
 
@@ -137,15 +109,12 @@ pub fn spawn_check(
 
 async fn check(http: reqwest::Client) -> Option<String> {
     let current = env!("CARGO_PKG_VERSION");
-    let channel = std::env::current_exe()
-        .map(|exe| detect_channel(&exe))
-        .unwrap_or(InstallChannel::Standalone);
     let mut state = load_state();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
 
     // Inside the daily window: answer from the cached state, no network.
     if now.saturating_sub(state.last_checked_unix) < CHECK_INTERVAL_SECS {
-        return with_skills_staleness(notice(&state.latest, current, channel), current);
+        return with_skills_staleness(notice(&state.latest, current), current);
     }
 
     let resp = http
@@ -158,7 +127,7 @@ async fn check(http: reqwest::Client) -> Option<String> {
     state.latest = body.get("version")?.as_str()?.to_string();
     state.last_checked_unix = now;
     save_state(&state);
-    with_skills_staleness(notice(&state.latest, current, channel), current)
+    with_skills_staleness(notice(&state.latest, current), current)
 }
 
 /// Seam for the skills installer: append its stale-skills line (recorded
@@ -197,52 +166,16 @@ mod tests {
 
     #[test]
     fn notice_only_when_newer() {
-        assert!(notice("0.2.5", "0.2.4", InstallChannel::Standalone).is_some());
-        assert!(notice("0.2.4", "0.2.4", InstallChannel::Standalone).is_none());
-        assert!(notice("", "0.2.4", InstallChannel::Standalone).is_none());
+        assert!(notice("0.2.5", "0.2.4").is_some());
+        assert!(notice("0.2.4", "0.2.4").is_none());
+        assert!(notice("", "0.2.4").is_none());
     }
 
     #[test]
-    fn channel_detection() {
-        let cases: Vec<(&str, InstallChannel)> = vec![
-            // npm: wrapper cache dir (binary is named flowleap-native)
-            (
-                "/home/u/.cache/flowleap/v0.3.0/flowleap-native",
-                InstallChannel::Npm,
-            ),
-            // npm: binary inside the global package's bin dir
-            (
-                "/usr/local/lib/node_modules/flowleap/bin/flowleap-native",
-                InstallChannel::Npm,
-            ),
-            // npm: node_modules path component even with an unexpected name
-            (
-                "/opt/node/node_modules/flowleap/bin/flowleap",
-                InstallChannel::Npm,
-            ),
-            // npm: .exe suffix is stripped by file_stem (forward slashes so
-            // the case parses on every host; Windows accepts both separators)
-            (
-                "C:/Users/u/.cache/flowleap/v0.3.0/flowleap-native.exe",
-                InstallChannel::Npm,
-            ),
-            // standalone: install.sh default location
-            ("/usr/local/bin/flowleap", InstallChannel::Standalone),
-            // standalone: cargo install
-            ("/home/u/.cargo/bin/flowleap", InstallChannel::Standalone),
-        ];
-        let detected: Vec<(&str, InstallChannel)> = cases
-            .iter()
-            .map(|(path, _)| (*path, detect_channel(Path::new(path))))
-            .collect();
-        assert_eq!(detected, cases);
-    }
-
-    #[test]
-    fn notice_matches_channel() {
-        let npm = notice("0.2.5", "0.2.4", InstallChannel::Npm).unwrap();
-        assert!(npm.contains("npm i -g flowleap@latest"));
-        let standalone = notice("0.2.5", "0.2.4", InstallChannel::Standalone).unwrap();
-        assert!(standalone.contains("install.sh | sh"));
+    fn notice_points_at_upgrade_command() {
+        // The daily notice recommends the channel-aware `flowleap upgrade`
+        // command; per-channel behavior lives in commands::upgrade.
+        let text = notice("0.2.5", "0.2.4").unwrap();
+        assert!(text.contains("flowleap upgrade"));
     }
 }

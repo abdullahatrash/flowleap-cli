@@ -159,6 +159,7 @@ To stay current:
 | `mcp` | Serve backend tools over the Model Context Protocol (stdio) |
 | `skills` | List, install, and update bundled agent skills (multi-harness) |
 | `config` | Manage CLI configuration |
+| `upgrade` | Upgrade the CLI itself (channel-aware: npm/brew/binary/cargo); alias `update` |
 
 A sampler:
 
@@ -224,6 +225,8 @@ cargo install --git https://github.com/abdullahatrash/flowleap-cli.git
 ```
 
 Prebuilt release binaries cover macOS (x86_64, arm64), Linux (x86_64 and arm64 glibc, plus a static `flowleap-linux-x86_64-musl` build for Alpine/containers — download it directly from the [releases page](https://github.com/abdullahatrash/flowleap-cli/releases)), and Windows (x86_64).
+
+**Updating:** `flowleap upgrade` updates the CLI on whichever channel installed it — no need to remember which. It runs `npm i -g flowleap@latest` for npm installs, `brew upgrade flowleap` for Homebrew, self-updates the raw binary in place (downloading the platform release asset and verifying its sha256 against `checksums.txt` before an atomic swap, exactly like first-run), and prints the `cargo install … --force` command for source installs. Use `flowleap upgrade --check` (add `--json` for agents) to see the channel and available version without changing anything. Upgrading the CLI doesn't touch already-installed skill files — run `flowleap skills update` for those.
 
 ## Authentication
 
@@ -379,6 +382,9 @@ Precedence: CLI flags > environment variables > config file.
 | `FLOWLEAP_USPTO_KEY` | USPTO ODP provider key |
 | `FLOWLEAP_ASSUME_YES` | Skip confirmation prompts (same as `--yes`) |
 | `FLOWLEAP_NO_UPDATE_CHECK` | Disable the once-a-day update notice (already skipped for `--json`, `--dry-run`, and non-TTY runs) |
+| `FLOWLEAP_RELEASES_API_URL` | Override the GitHub releases API URL `flowleap upgrade` checks (enterprise mirrors) |
+| `FLOWLEAP_RELEASES_DOWNLOAD_BASE` | Override the base URL `flowleap upgrade` downloads release assets from (enterprise mirrors) |
+| `FLOWLEAP_NPM_REGISTRY_URL` | Override the npm registry URL used for the version check |
 
 ### Global Flags
 
