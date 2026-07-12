@@ -1,8 +1,9 @@
 use anyhow::{bail, Context as AnyhowContext, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use include_dir::{include_dir, Dir};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -20,8 +21,11 @@ static EMBEDDED_SKILLS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/skills");
 const RULES_BEGIN: &str = "<!-- BEGIN FLOWLEAP AGENT RULES";
 const RULES_END: &str = "<!-- END FLOWLEAP AGENT RULES -->";
 
-/// Version-stamp marker file written into directory installs (claude / --dir).
-const VERSION_STAMP_FILE: &str = ".flowleap-cli-version";
+/// Per-install manifest written at the root of copy targets (claude / --dir).
+/// Records the CLI version that produced the install and a content digest of
+/// each skill directory we wrote, so a later install/update can tell our own
+/// (safe-to-refresh) copy apart from one the user has edited by hand.
+const MANIFEST_FILE: &str = ".flowleap-skills-manifest.json";
 
 /// Max command lines extracted per skill for the condensed reference.
 const COMMANDS_PER_SKILL: usize = 8;
@@ -68,7 +72,8 @@ enum SkillsCommand {
         #[arg(long)]
         dir: Option<PathBuf>,
 
-        /// Overwrite skills that are already installed
+        /// Overwrite locally-modified skills too (plain install already
+        /// refreshes copies this CLI wrote and you haven't edited)
         #[arg(long)]
         force: bool,
 
@@ -76,8 +81,14 @@ enum SkillsCommand {
         #[arg(value_name = "SKILL")]
         names: Vec<String>,
     },
-    /// Re-render/re-copy every recorded install with this CLI's content
-    Update,
+    /// Re-render/re-copy every recorded install with this CLI's content.
+    /// Refreshes copies this CLI installed and you haven't edited; skills you
+    /// modified locally are left untouched unless you pass --force.
+    Update {
+        /// Overwrite locally-modified skills too
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 pub fn run(ctx: &Context, args: SkillsArgs) -> Result<()> {
@@ -90,7 +101,7 @@ pub fn run(ctx: &Context, args: SkillsArgs) -> Result<()> {
             force,
             names,
         } => install(ctx, target, project, dir, force, &names),
-        SkillsCommand::Update => update(ctx),
+        SkillsCommand::Update { force } => update(ctx, force),
     }
 }
 
@@ -236,21 +247,30 @@ fn install(
             "path": path,
             "version": version,
             "installed": outcome.installed,
+            "updated": outcome.updated,
+            "unchanged": outcome.unchanged,
             "skipped": outcome.skipped,
-            "hint": if outcome.skipped.is_empty() { serde_json::Value::Null } else { json!("already installed; use --force to overwrite") },
+            "hint": if outcome.skipped.is_empty() { serde_json::Value::Null } else { json!("locally-modified skills were left untouched; re-run with --force to overwrite") },
         }));
     } else if is_copy_target(target) {
         println!(
-            "Installed {} skill(s) to {}",
-            outcome.installed.len(),
-            path.display()
+            "Installed {} skill(s) to {} (flowleap-cli v{})",
+            outcome.installed.len() + outcome.updated.len(),
+            path.display(),
+            version
         );
         for name in &outcome.installed {
             println!("  + {}", name);
         }
+        for name in &outcome.updated {
+            println!("  * {} (refreshed stale copy)", name);
+        }
+        if !outcome.unchanged.is_empty() {
+            println!("{} skill(s) already up to date.", outcome.unchanged.len());
+        }
         if !outcome.skipped.is_empty() {
             println!(
-                "Skipped {} already-installed skill(s) (use --force to overwrite):",
+                "Left {} locally-modified skill(s) untouched (re-run with --force to overwrite):",
                 outcome.skipped.len()
             );
             for name in &outcome.skipped {
@@ -290,13 +310,20 @@ fn select_skills(names: &[String]) -> Result<Vec<&'static str>> {
     Ok(selected)
 }
 
+#[derive(Default)]
 struct InstallOutcome {
+    /// Freshly written — the skill wasn't present before.
     installed: Vec<String>,
+    /// Our own previously-installed copy, refreshed in place.
+    updated: Vec<String>,
+    /// Already byte-identical to the bundled copy; nothing to do.
+    unchanged: Vec<String>,
+    /// User-edited or foreign copy — left untouched (needs --force).
     skipped: Vec<String>,
 }
 
 /// Install (or refresh) skills for one resolved target. Copy targets write
-/// SKILL.md directories plus a version-stamp file; rendered targets write the
+/// SKILL.md directories plus a content manifest; rendered targets write the
 /// condensed agent-rules document (always overwriting their own output).
 fn perform_install(
     target: &str,
@@ -315,38 +342,176 @@ fn perform_install(
     }
     Ok(InstallOutcome {
         installed: selected.iter().map(|s| s.to_string()).collect(),
-        skipped: Vec::new(),
+        ..Default::default()
     })
 }
 
+/// Content manifest written at a copy target's root (`.flowleap-skills-manifest.json`).
+/// `cliVersion` is the CLI that last wrote the target; `skills` maps each skill
+/// we installed to the content digest we wrote, so we can later recognise our
+/// own untouched copy versus one the user edited.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct SkillsManifest {
+    #[serde(rename = "cliVersion", default)]
+    cli_version: String,
+    #[serde(default)]
+    skills: BTreeMap<String, String>,
+}
+
+impl SkillsManifest {
+    fn path_in(target: &Path) -> PathBuf {
+        target.join(MANIFEST_FILE)
+    }
+
+    fn load(target: &Path) -> Self {
+        fs::read_to_string(Self::path_in(target))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    fn save(&self, target: &Path) -> Result<()> {
+        let text = serde_json::to_string_pretty(self)?;
+        write_file(&Self::path_in(target), &format!("{}\n", text))
+    }
+}
+
+/// Copy skills into `target`, refreshing our own stale copies while protecting
+/// anything the user has edited:
+///
+/// - absent on disk → install fresh;
+/// - byte-identical to the bundled copy → leave it (already current);
+/// - present and matching the digest we recorded → our own stale copy, refresh;
+/// - anything else → user-edited or foreign, skip (unless `force`).
+///
+/// Skills not in `selected` are never touched.
 fn copy_skills(
     target: &Path,
     selected: &[&str],
     force: bool,
     version: &str,
 ) -> Result<InstallOutcome> {
-    let mut installed: Vec<String> = Vec::new();
-    let mut skipped: Vec<String> = Vec::new();
+    let mut manifest = SkillsManifest::load(target);
+    let mut outcome = InstallOutcome::default();
+    let mut dirty = manifest.cli_version != version;
 
     for name in selected {
         let skill_dir = EMBEDDED_SKILLS
             .get_dir(name)
             .expect("selected skills come from the embedded tree");
         let dest = target.join(name);
-        if dest.exists() && !force {
-            skipped.push(name.to_string());
-            continue;
+        let bundled = embedded_skill_digest(name);
+
+        match installed_skill_digest(&dest) {
+            None => {
+                write_dir(skill_dir, target)?;
+                manifest.skills.insert(name.to_string(), bundled);
+                outcome.installed.push(name.to_string());
+                dirty = true;
+            }
+            Some(on_disk) if on_disk == bundled => {
+                // Already exactly our current content. Record the digest if an
+                // earlier CLI installed it before manifests existed.
+                if manifest.skills.get(*name) != Some(&bundled) {
+                    manifest.skills.insert(name.to_string(), bundled);
+                    dirty = true;
+                }
+                outcome.unchanged.push(name.to_string());
+            }
+            Some(on_disk) => {
+                let is_our_copy = manifest.skills.get(*name) == Some(&on_disk);
+                if is_our_copy || force {
+                    write_dir(skill_dir, target)?;
+                    manifest.skills.insert(name.to_string(), bundled);
+                    outcome.updated.push(name.to_string());
+                    dirty = true;
+                } else {
+                    outcome.skipped.push(name.to_string());
+                }
+            }
         }
-        write_dir(skill_dir, target)?;
-        installed.push(name.to_string());
     }
 
-    // Stamp the directory only when we actually wrote current content.
-    if !installed.is_empty() {
-        write_file(&target.join(VERSION_STAMP_FILE), &format!("{}\n", version))?;
+    if dirty {
+        manifest.cli_version = version.to_string();
+        manifest.save(target)?;
     }
 
-    Ok(InstallOutcome { installed, skipped })
+    Ok(outcome)
+}
+
+/// Content digest of a bundled skill — the same value `copy_skills` records
+/// after writing it, so an unmodified install compares equal.
+fn embedded_skill_digest(name: &str) -> String {
+    let dir = EMBEDDED_SKILLS
+        .get_dir(name)
+        .expect("digest requested for a bundled skill");
+    let mut entries = Vec::new();
+    collect_embedded(dir, Path::new(name), &mut entries);
+    fnv_digest(entries)
+}
+
+fn collect_embedded(dir: &Dir<'_>, skill_root: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+    for sub in dir.dirs() {
+        collect_embedded(sub, skill_root, out);
+    }
+    for file in dir.files() {
+        // Embedded paths are rooted at skills/; make them relative to the skill
+        // so they line up with the on-disk walk below.
+        let rel = file.path().strip_prefix(skill_root).unwrap_or(file.path());
+        out.push((rel_to_slash(rel), file.contents().to_vec()));
+    }
+}
+
+/// Content digest of an installed skill directory, or None when absent.
+fn installed_skill_digest(skill_dir: &Path) -> Option<String> {
+    if !skill_dir.is_dir() {
+        return None;
+    }
+    let mut entries = Vec::new();
+    collect_disk(skill_dir, skill_dir, &mut entries).ok()?;
+    Some(fnv_digest(entries))
+}
+
+fn collect_disk(base: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) -> std::io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_disk(base, &path, out)?;
+        } else {
+            let rel = path.strip_prefix(base).unwrap_or(&path);
+            out.push((rel_to_slash(rel), fs::read(&path)?));
+        }
+    }
+    Ok(())
+}
+
+fn rel_to_slash(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+/// Non-cryptographic FNV-1a digest (hex) over a set of (relative path, bytes)
+/// entries, in sorted path order so it is stable across runs and platforms.
+/// Used only to tell our own installed copy apart from a user-edited one —
+/// never for security.
+fn fnv_digest(mut entries: Vec<(String, Vec<u8>)>) -> String {
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for (path, bytes) in &entries {
+        hash = fnv_update(hash, path.as_bytes());
+        hash = fnv_update(hash, &[0]);
+        hash = fnv_update(hash, bytes);
+        hash = fnv_update(hash, &[0]);
+    }
+    format!("fnv1a-{:016x}", hash)
+}
+
+fn fnv_update(mut hash: u64, bytes: &[u8]) -> u64 {
+    for &byte in bytes {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
 }
 
 /// Upsert the rendered rules block into a shared file (AGENTS.md / GEMINI.md),
@@ -415,7 +580,7 @@ fn record_install(target: &str, path: &Path, names: &[String], version: &str) ->
     cfg.save()
 }
 
-fn update(ctx: &Context) -> Result<()> {
+fn update(ctx: &Context, force: bool) -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
     let mut cfg = Config::load()?;
 
@@ -437,7 +602,7 @@ fn update(ctx: &Context) -> Result<()> {
         return Ok(());
     }
 
-    apply_updates(&mut cfg.skill_installs, version)?;
+    let skipped = apply_updates(&mut cfg.skill_installs, version, force)?;
     let updated = cfg.skill_installs.clone();
     cfg.save()?;
 
@@ -446,6 +611,7 @@ fn update(ctx: &Context) -> Result<()> {
             "ok": true,
             "version": version,
             "updated": updated,
+            "skipped": skipped,
         }));
     } else {
         println!(
@@ -456,15 +622,27 @@ fn update(ctx: &Context) -> Result<()> {
         for rec in &updated {
             println!("  * {} -> {}", rec.target, rec.path.display());
         }
+        if !skipped.is_empty() {
+            println!(
+                "Left {} locally-modified skill(s) untouched (re-run with --force to overwrite):",
+                skipped.len()
+            );
+            for entry in &skipped {
+                println!("  = {}", entry);
+            }
+        }
     }
     Ok(())
 }
 
 /// Re-render/re-copy every recorded install with this binary's embedded
-/// content and bump each record's stamp. Pure over the record list so tests
-/// can drive it against temporary paths.
-fn apply_updates(installs: &mut [SkillInstall], version: &str) -> Result<()> {
+/// content and bump each record's stamp. Copy targets refresh our own stale
+/// copies but skip locally-modified skills unless `force`; the returned list
+/// names any skill that was protected, as `<skill> (<path>)`. Pure over the
+/// record list so tests can drive it against temporary paths.
+fn apply_updates(installs: &mut [SkillInstall], version: &str, force: bool) -> Result<Vec<String>> {
     let available = skill_names();
+    let mut skipped = Vec::new();
     for rec in installs.iter_mut() {
         // Skills recorded under an older CLI may since have been renamed or
         // dropped from the bundle; refresh the ones that still exist.
@@ -477,10 +655,13 @@ fn apply_updates(installs: &mut [SkillInstall], version: &str) -> Result<()> {
                 .copied()
                 .collect()
         };
-        perform_install(&rec.target, &rec.path, &selected, true, version)?;
+        let outcome = perform_install(&rec.target, &rec.path, &selected, force, version)?;
+        for name in outcome.skipped {
+            skipped.push(format!("{} ({})", name, rec.path.display()));
+        }
         rec.version = version.to_string();
     }
-    Ok(())
+    Ok(skipped)
 }
 
 /// Line for the daily update notice (hooked from src/update.rs): mentions
@@ -500,6 +681,43 @@ fn stale_notice_for(installs: &[SkillInstall], current_version: &str) -> Option<
             "{} installed skill target(s) were rendered by an older flowleap. Refresh: flowleap skills update",
             stale
         )
+    })
+}
+
+/// Skills row for `flowleap doctor`: recorded install targets and any whose
+/// stamp predates this binary. Version-based (matching the daily update
+/// notice); the install-time content hash guards the files themselves.
+pub fn doctor_skills_status(current_version: &str) -> serde_json::Value {
+    let installs = Config::load()
+        .map(|cfg| cfg.skill_installs)
+        .unwrap_or_default();
+    doctor_skills_status_for(&installs, current_version)
+}
+
+fn doctor_skills_status_for(installs: &[SkillInstall], current_version: &str) -> serde_json::Value {
+    let stale: Vec<serde_json::Value> = installs
+        .iter()
+        .filter(|rec| crate::update::is_newer(current_version, &rec.version))
+        .map(|rec| {
+            json!({
+                "target": rec.target,
+                "path": rec.path,
+                "installedVersion": rec.version,
+            })
+        })
+        .collect();
+    let hint = (!stale.is_empty()).then(|| {
+        format!(
+            "{} skill install(s) predate this CLI (current v{}) — refresh with 'flowleap skills update'",
+            stale.len(),
+            current_version
+        )
+    });
+    json!({
+        "recorded": installs.len(),
+        "currentVersion": current_version,
+        "stale": stale,
+        "hint": hint,
     })
 }
 
@@ -673,24 +891,117 @@ mod tests {
     }
 
     #[test]
-    fn install_and_skip_roundtrip() {
+    fn fresh_install_writes_manifest() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let target = tmp.path().join("skills");
         let outcome = copy_skills(&target, &["flowleap"], false, TEST_VERSION).expect("install");
         assert!(target.join("flowleap/SKILL.md").is_file());
-        assert_eq!(
-            fs::read_to_string(target.join(VERSION_STAMP_FILE)).expect("stamp"),
-            format!("{}\n", TEST_VERSION)
-        );
         assert_eq!(outcome.installed, vec!["flowleap"]);
 
-        // Second install without --force skips and leaves the stamp alone.
+        let manifest = SkillsManifest::load(&target);
+        assert_eq!(manifest.cli_version, TEST_VERSION);
+        assert_eq!(
+            manifest.skills.get("flowleap"),
+            Some(&embedded_skill_digest("flowleap"))
+        );
+    }
+
+    #[test]
+    fn reinstall_is_a_noop_when_content_matches() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let target = tmp.path().join("skills");
+        copy_skills(&target, &["flowleap"], false, TEST_VERSION).expect("install");
+
+        // Same content, even under a newer CLI version: nothing to rewrite.
         let outcome = copy_skills(&target, &["flowleap"], false, "9.9.9").expect("reinstall");
+        assert_eq!(outcome.unchanged, vec!["flowleap"]);
+        assert!(outcome.installed.is_empty() && outcome.updated.is_empty());
+        assert!(outcome.skipped.is_empty());
+        // The stamp still advances to the running CLI.
+        assert_eq!(SkillsManifest::load(&target).cli_version, "9.9.9");
+    }
+
+    #[test]
+    fn reinstall_protects_user_edits_but_force_overwrites() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let target = tmp.path().join("skills");
+        copy_skills(&target, &["flowleap"], false, TEST_VERSION).expect("install");
+        let skill_md = target.join("flowleap/SKILL.md");
+        let original = fs::read_to_string(&skill_md).expect("read skill");
+
+        // A hand edit is left untouched without --force.
+        fs::write(&skill_md, "user edits\n").expect("edit");
+        let outcome = copy_skills(&target, &["flowleap"], false, TEST_VERSION).expect("reinstall");
+        assert_eq!(outcome.skipped, vec!["flowleap"]);
+        assert_eq!(fs::read_to_string(&skill_md).expect("read"), "user edits\n");
+
+        // --force restores the bundled content.
+        let outcome = copy_skills(&target, &["flowleap"], true, TEST_VERSION).expect("force");
+        assert_eq!(outcome.updated, vec!["flowleap"]);
+        assert_eq!(fs::read_to_string(&skill_md).expect("read"), original);
+    }
+
+    #[test]
+    fn reinstall_refreshes_our_own_stale_copy() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let target = tmp.path().join("skills");
+        copy_skills(&target, &["flowleap"], false, TEST_VERSION).expect("install");
+        let skill_md = target.join("flowleap/SKILL.md");
+        let original = fs::read_to_string(&skill_md).expect("read skill");
+
+        // Simulate an older bundled copy: change the content, then record *that*
+        // digest in the manifest so it looks like something this CLI installed.
+        fs::write(&skill_md, "older bundled content\n").expect("age");
+        let mut manifest = SkillsManifest::load(&target);
+        manifest.skills.insert(
+            "flowleap".to_string(),
+            installed_skill_digest(&target.join("flowleap")).expect("digest"),
+        );
+        manifest.save(&target).expect("save manifest");
+
+        // No --force needed: it's our copy, so it refreshes in place.
+        let outcome = copy_skills(&target, &["flowleap"], false, TEST_VERSION).expect("refresh");
+        assert_eq!(outcome.updated, vec!["flowleap"]);
+        assert_eq!(fs::read_to_string(&skill_md).expect("read"), original);
+    }
+
+    #[test]
+    fn foreign_same_name_skill_is_protected() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let target = tmp.path().join("skills");
+        // A skill we never installed (no manifest entry) with our name.
+        let foreign = target.join("flowleap");
+        fs::create_dir_all(&foreign).expect("mkdir");
+        fs::write(foreign.join("SKILL.md"), "not ours\n").expect("write");
+
+        let outcome = copy_skills(&target, &["flowleap"], false, TEST_VERSION).expect("install");
         assert_eq!(outcome.skipped, vec!["flowleap"]);
         assert_eq!(
-            fs::read_to_string(target.join(VERSION_STAMP_FILE)).expect("stamp"),
-            format!("{}\n", TEST_VERSION)
+            fs::read_to_string(foreign.join("SKILL.md")).expect("read"),
+            "not ours\n"
         );
+    }
+
+    #[test]
+    fn doctor_status_flags_only_older_installs() {
+        let rec = |target: &str, version: &str| SkillInstall {
+            target: target.to_string(),
+            path: PathBuf::from("skills"),
+            version: version.to_string(),
+            skills: Vec::new(),
+        };
+        let status =
+            doctor_skills_status_for(&[rec("claude", "0.1.0"), rec("codex", "0.2.5")], "0.2.5");
+        assert_eq!(status["recorded"], 2);
+        assert_eq!(status["stale"].as_array().unwrap().len(), 1);
+        assert!(status["hint"]
+            .as_str()
+            .unwrap()
+            .contains("flowleap skills update"));
+
+        let fresh = doctor_skills_status_for(&[rec("claude", "0.2.5")], "0.2.5");
+        assert_eq!(fresh["stale"].as_array().unwrap().len(), 0);
+        assert!(fresh["hint"].is_null());
     }
 
     /// Compare rendered output against a golden file; run with
@@ -801,7 +1112,8 @@ mod tests {
             },
         ];
 
-        apply_updates(&mut installs, "9.9.9").expect("update");
+        let skipped = apply_updates(&mut installs, "9.9.9", false).expect("update");
+        assert!(skipped.is_empty(), "clean tree has nothing to protect");
 
         for rec in &installs {
             assert_eq!(rec.version, "9.9.9", "record stamp for {}", rec.target);
@@ -816,8 +1128,8 @@ mod tests {
         }
         assert!(tmp.path().join("skills/flowleap/SKILL.md").is_file());
         assert_eq!(
-            fs::read_to_string(tmp.path().join("skills").join(VERSION_STAMP_FILE)).expect("stamp"),
-            "9.9.9\n"
+            SkillsManifest::load(&tmp.path().join("skills")).cli_version,
+            "9.9.9"
         );
     }
 
