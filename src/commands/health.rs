@@ -18,8 +18,6 @@ enum HealthCommand {
     Cache,
     /// Redis cache health
     Redis,
-    /// HTTP agent pool status
-    Agents,
 }
 
 pub async fn run(ctx: &Context, args: HealthArgs) -> Result<()> {
@@ -28,7 +26,6 @@ pub async fn run(ctx: &Context, args: HealthArgs) -> Result<()> {
         Some(HealthCommand::Api) => "/v1/health",
         Some(HealthCommand::Cache) => "/health/cache",
         Some(HealthCommand::Redis) => "/health/redis",
-        Some(HealthCommand::Agents) => "/health/agents",
     };
 
     let result = ctx.execute_json_envelope_or_error(ctx.get(path)).await?;
