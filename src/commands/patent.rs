@@ -36,6 +36,10 @@ enum PatentCommand {
         /// Query strategy focus
         #[arg(long, value_enum, default_value = "comprehensive")]
         focus: QueryFocus,
+
+        /// Consent to send the description to FlowLeap and its configured LLM provider
+        #[arg(long)]
+        allow_external_processing: bool,
     },
 }
 
@@ -65,7 +69,15 @@ pub async fn run(ctx: &Context, args: PatentArgs) -> Result<()> {
             limit,
             countries,
         } => search(ctx, &query, limit, countries.as_deref()).await,
-        PatentCommand::BuildQuery { description, focus } => {
+        PatentCommand::BuildQuery {
+            description,
+            focus,
+            allow_external_processing,
+        } => {
+            super::query_privacy::require_external_processing_consent(
+                ctx,
+                allow_external_processing,
+            )?;
             build_query(ctx, &description, &focus).await
         }
     }

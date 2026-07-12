@@ -47,6 +47,8 @@ flowleap <command> <subcommand> [flags]
 ```
 
 All commands support `--output json|table|human`, `--dry-run`, and `--verbose`.
+Use `--dry-run-redacted` with `--dry-run` when request bodies may contain
+unpublished inventions, claims, document text, URLs, or search queries.
 
 ## Config Precedence
 
@@ -178,6 +180,11 @@ Error `code` values: `MISSING_PARAM` (400), `NOT_FOUND` (404), `RATE_LIMITED` (4
 
 - Never output stored credentials (API keys, tokens) in logs or verbose mode
 - Use `--dry-run` for safety when testing mutating operations
+- Use `--dry-run-redacted` when dry-run output itself may enter terminal, CI,
+  or agent logs. It preserves request shape while replacing sensitive values.
+- `patent build-query` and `uspto build-query` transmit their descriptions to
+  FlowLeap and then to Anthropic or OpenAI. Live calls require
+  `--allow-external-processing`; dry-runs do not transmit and do not require it.
 - Authorization header is stripped from verbose output
 - Base-URL credential guard: when the effective base URL's host is not
   `flowleap.co`/`*.flowleap.co`/`localhost`/`127.0.0.1`/`::1`, the CLI prints

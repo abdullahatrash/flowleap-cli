@@ -34,6 +34,7 @@ The login, token minting/listing/revocation, and 401 self-heal commands live in
 | `--api-key <key>` | Override stored API key (`fl_pat_…`) | — |
 | `--token <token>` | Override stored token | — |
 | `--dry-run` | Show request without executing | `false` |
+| `--dry-run-redacted` | Redact sensitive values from dry-run output; requires `--dry-run` | `false` |
 | `--verbose`, `-v` | Show request/response details | `false` |
 
 ## Configuration
@@ -101,5 +102,7 @@ flowleap upgrade
 ## Safety
 
 - Use `--dry-run` before executing mutating operations
+- Add `--dry-run-redacted` when the request contains an unpublished invention,
+  claim, document text, URL, or search query that should not enter logs
 - Use `--verbose` to inspect request details (credentials are redacted)
 - Never include credentials in commit messages or logs

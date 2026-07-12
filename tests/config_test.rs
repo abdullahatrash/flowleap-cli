@@ -279,6 +279,7 @@ fn test_auth_fallback_key_gating() {
         },
         output_format: "json".to_string(),
         dry_run: false,
+        dry_run_redacted: false,
         verbose: false,
         token_overridden: overridden,
         assume_yes: false,

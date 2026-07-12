@@ -51,8 +51,12 @@ flowleap --json uspto search --body-file query.json
 ## Build a query from natural language
 
 ```bash
-flowleap --json uspto build-query "quantum error correction filed after 2022" --focus precise
+flowleap --json uspto build-query "quantum error correction filed after 2022" --focus precise --allow-external-processing
 ```
+
+Live query generation sends the description to FlowLeap and then to Anthropic
+or OpenAI. `--allow-external-processing` records explicit consent; use
+`--dry-run --dry-run-redacted` to inspect only the request shape locally.
 
 Returns `strategy.recommended_query` — a **complete ODP request body** (not a
 string). Submit it directly with `--body`:

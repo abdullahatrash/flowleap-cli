@@ -475,6 +475,7 @@ pub struct Context {
     pub credentials: Credentials,
     pub output_format: String,
     pub dry_run: bool,
+    pub dry_run_redacted: bool,
     pub verbose: bool,
     /// True when the session token came from --token / FLOWLEAP_TOKEN rather
     /// than the credential store. An explicit token expresses intent, so the
@@ -675,7 +676,10 @@ impl Context {
             eprintln!("[dry-run] {} {}", req.method(), req.url());
             if let Some(body) = req.body() {
                 if let Some(bytes) = body.as_bytes() {
-                    if let Ok(json) = serde_json::from_slice::<Value>(bytes) {
+                    if let Ok(mut json) = serde_json::from_slice::<Value>(bytes) {
+                        if self.dry_run_redacted {
+                            redact_sensitive_json(&mut json);
+                        }
                         eprintln!("[dry-run] Body: {}", serde_json::to_string_pretty(&json)?);
                     }
                 }
@@ -885,13 +889,20 @@ impl Context {
     }
 
     fn dry_run_response(&self, req: &Request) -> Result<Value> {
-        let body = req
+        let mut body = req
             .body()
             .and_then(|body| body.as_bytes())
             .and_then(|bytes| serde_json::from_slice::<Value>(bytes).ok());
 
+        if self.dry_run_redacted {
+            if let Some(body) = body.as_mut() {
+                redact_sensitive_json(body);
+            }
+        }
+
         let dry_run = json!({
             "dryRun": true,
+            "dryRunRedacted": self.dry_run_redacted,
             "method": req.method().as_str(),
             "url": req.url().as_str(),
             "authenticated": req.headers().contains_key("authorization") || req.headers().contains_key("x-api-key"),
@@ -904,6 +915,37 @@ impl Context {
         });
 
         Ok(dry_run)
+    }
+}
+
+const SENSITIVE_BODY_FIELDS: &[&str] = &[
+    "claim",
+    "content",
+    "description",
+    "filebase64",
+    "q",
+    "query",
+    "text",
+    "url",
+];
+
+fn redact_sensitive_json(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for (key, value) in map {
+                if SENSITIVE_BODY_FIELDS.contains(&key.to_ascii_lowercase().as_str()) {
+                    *value = Value::String("[REDACTED]".to_string());
+                } else {
+                    redact_sensitive_json(value);
+                }
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                redact_sensitive_json(value);
+            }
+        }
+        _ => {}
     }
 }
 

@@ -15,6 +15,7 @@ pub mod npl;
 pub mod ocr;
 pub mod ops;
 pub mod patent;
+mod query_privacy;
 pub mod skills;
 pub mod tools;
 pub mod upgrade;
