@@ -114,7 +114,6 @@ flowleap --json patent build-query "solid state battery separators" --focus prec
 ```bash
 flowleap --json uspto search --query 'applicationMetaData.inventionTitle:"machine learning"' --limit 5
 flowleap --json uspto build-query "quantum error correction filed after 2022" --focus precise
-flowleap --json api request post /v1/patent-search-uspto/search --body '<recommended_query JSON>'
 flowleap --json uspto grant 11800000
 flowleap --json uspto application 16123456
 flowleap --json uspto continuity 16123456
