@@ -22,10 +22,10 @@ skills for the full workflow. Shared conventions stay in their owner skills:
 
 ```bash
 # Describe the invention in plain English, then search each database in its own syntax
-flowleap patent build-query "AI-powered smart thermostat that learns occupant behavior and optimizes HVAC using reinforcement learning"
+flowleap patent build-query "AI-powered smart thermostat that learns occupant behavior and optimizes HVAC using reinforcement learning" --allow-external-processing
 flowleap --json patent search --query "<CQL from build-query>" --limit 20
 
-flowleap uspto build-query "AI smart thermostat that learns occupant behavior via reinforcement learning"
+flowleap uspto build-query "AI smart thermostat that learns occupant behavior via reinforcement learning" --allow-external-processing
 flowleap --json uspto search --query "<recommended_query from build-query>" --limit 20
 ```
 

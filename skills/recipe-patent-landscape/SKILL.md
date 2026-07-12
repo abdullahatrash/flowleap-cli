@@ -17,8 +17,8 @@ USPTO Lucene grammar.
 ### Step 1: Define Search Scope
 
 ```bash
-flowleap patent build-query "<technology description>"
-flowleap uspto build-query "<technology description>"
+flowleap patent build-query "<technology description>" --allow-external-processing
+flowleap uspto build-query "<technology description>" --allow-external-processing
 ```
 
 Done when you have an EPO CQL query and a USPTO ODP query for the area.
@@ -46,7 +46,7 @@ Build applicant-scoped queries rather than hand-writing CQL — see `flowleap-pa
 for the CQL fields (`pa=` applicant, `ti=` title):
 
 ```bash
-flowleap patent build-query "<top assignee> patents in <technology>"
+flowleap patent build-query "<top assignee> patents in <technology>" --allow-external-processing
 flowleap --json patent search --query "<CQL from build-query>" --limit 30
 ```
 

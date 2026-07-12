@@ -60,49 +60,53 @@ fn dry_run_succeeds_without_credentials() {
 fn query_builder_requires_explicit_external_processing_consent() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let description = "confidential UV-C earbud charging case invention";
-    let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
-        .env("HOME", temp_home.path())
-        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
-        .env("FLOWLEAP_API_KEY", "fl_pat_test")
-        .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
-        .args(["patent", "build-query", description, "--output", "json"])
-        .output()
-        .expect("run build-query without consent");
+    for command in ["patent", "uspto"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
+            .env("HOME", temp_home.path())
+            .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+            .env("FLOWLEAP_API_KEY", "fl_pat_test")
+            .env("FLOWLEAP_NO_UPDATE_CHECK", "1")
+            .args([command, "build-query", description, "--output", "json"])
+            .output()
+            .expect("run build-query without consent");
 
-    assert!(!output.status.success());
-    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
-    assert!(stdout.contains("--allow-external-processing"));
-    assert!(stdout.contains("Anthropic or OpenAI"));
+        assert!(!output.status.success(), "{command} unexpectedly succeeded");
+        let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+        assert!(stdout.contains("--allow-external-processing"));
+        assert!(stdout.contains("Anthropic or OpenAI"));
+    }
 }
 
 #[test]
 fn redacted_dry_run_preserves_shape_without_sensitive_values() {
     let temp_home = tempfile::tempdir().expect("create temp home");
     let description = "confidential UV-C earbud charging case invention";
-    let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
-        .env("HOME", temp_home.path())
-        .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
-        .env_remove("FLOWLEAP_API_KEY")
-        .env_remove("FLOWLEAP_TOKEN")
-        .args([
-            "--json",
-            "--dry-run",
-            "--dry-run-redacted",
-            "patent",
-            "build-query",
-            description,
-        ])
-        .output()
-        .expect("run redacted build-query dry-run");
+    for command in ["patent", "uspto"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_flowleap"))
+            .env("HOME", temp_home.path())
+            .env("XDG_CONFIG_HOME", temp_home.path().join(".config"))
+            .env_remove("FLOWLEAP_API_KEY")
+            .env_remove("FLOWLEAP_TOKEN")
+            .args([
+                "--json",
+                "--dry-run",
+                "--dry-run-redacted",
+                command,
+                "build-query",
+                description,
+            ])
+            .output()
+            .expect("run redacted build-query dry-run");
 
-    assert!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
-    assert!(!stdout.contains(description));
-    let value: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is json");
-    assert_eq!(value["dryRun"], true);
-    assert_eq!(value["dryRunRedacted"], true);
-    assert_eq!(value["body"]["description"], "[REDACTED]");
-    assert_eq!(value["body"]["focus"], "comprehensive");
+        assert!(output.status.success(), "{command} dry-run failed");
+        let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+        assert!(!stdout.contains(description));
+        let value: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is json");
+        assert_eq!(value["dryRun"], true);
+        assert_eq!(value["dryRunRedacted"], true);
+        assert_eq!(value["body"]["description"], "[REDACTED]");
+        assert_eq!(value["body"]["focus"], "comprehensive");
+    }
 }
 
 #[test]

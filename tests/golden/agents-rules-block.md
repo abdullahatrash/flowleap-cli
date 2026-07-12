@@ -109,7 +109,7 @@ flowleap --json tools list
 flowleap --json tools describe get_bibliography
 flowleap --json tools openapi
 flowleap --json tools run get_bibliography patent_number=EP1000000
-flowleap --json patent build-query "solid state battery separators" --focus precise
+flowleap --json patent build-query "solid state battery separators" --focus precise --allow-external-processing
 ```
 
 #### flowleap-uspto — Search USPTO Open Data Portal records with Lucene queries, fetch granted patents, applications and continuity chains, and build ODP queries from natural language.

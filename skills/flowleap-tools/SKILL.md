@@ -68,7 +68,7 @@ flowleap --json tools run search_uspto_portfolio_by_customer_number customer_num
 Query building still lives in the provider commands:
 
 ```bash
-flowleap --json patent build-query "solid state battery separators" --focus precise
+flowleap --json patent build-query "solid state battery separators" --focus precise --allow-external-processing
 flowleap --json tools run search_patents --input "{\"query\": \"<recommended_cql>\"}"
 ```
 

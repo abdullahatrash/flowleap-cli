@@ -104,5 +104,7 @@ flowleap upgrade
 - Use `--dry-run` before executing mutating operations
 - Add `--dry-run-redacted` when the request contains an unpublished invention,
   claim, document text, URL, or search query that should not enter logs
+- Never add `--allow-external-processing` unless the user has given informed
+  consent to send the description to FlowLeap and Anthropic or OpenAI
 - Use `--verbose` to inspect request details (credentials are redacted)
 - Never include credentials in commit messages or logs
