@@ -39,6 +39,16 @@ flowleap ops abstract <doc>                # Abstract text
 
 Doc IDs are normalized server-side — `ep1.000.000` and `EP1000000` both resolve.
 
+For a non-EP-style number (US grant/application, or an original-format KR/CN
+number), convert it to DOCDB first so OPS can match it:
+
+```bash
+flowleap convert-number US5443036.A --to docdb
+```
+
+A `SERVER.EntityNotFound` on some KR/CN documents is an OPS coverage gap, not a
+retryable error — don't retry it; fall back to another source for that document.
+
 ### Response envelope
 
 OPS endpoints return data wrapped in a success/error envelope. The CLI unwraps

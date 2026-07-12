@@ -16,19 +16,9 @@ command -v flowleap || true
 flowleap --json doctor
 ```
 
-For local backend work:
-
-```bash
-flowleap --json doctor --base-url http://localhost:8000
-flowleap --json health --base-url http://localhost:8000
-flowleap --json health cache --base-url http://localhost:8000
-```
-
-For production:
-
-```bash
-flowleap --json doctor --base-url https://api.flowleap.co
-```
+`doctor` targets the production backend (https://api.flowleap.co) by default —
+no `--base-url` needed. Developing the FlowLeap backend itself? Add
+`--base-url http://localhost:8000` to point at a local server.
 
 ## Where Things Live
 

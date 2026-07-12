@@ -23,7 +23,14 @@ Posts to `/v1/patent-search`. Returns patent results with publication number, ti
 | `--limit` | Maximum results (1-100) | `10` |
 | `--countries` | Country filter, comma-separated (e.g. `EP,WO`) | none |
 
+Jurisdiction is set with `--countries` — `patent search` has no `--source` flag
+(that flag belongs to `academic search`, for `scholar` vs `arxiv`).
+
 For US-specific searches use `flowleap uspto search` (ODP Lucene syntax).
+
+CQL terms must be at least 3 characters — OPS rejects shorter prefixes with a
+`400 CLIENT.PrefixTooShort`. Spell the word out (`ti="ultraviolet"`, not
+`ti="uv"`); this applies to hand-written queries and to CQL from `build-query`.
 
 #### Examples
 

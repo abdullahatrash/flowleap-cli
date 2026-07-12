@@ -30,6 +30,18 @@ flowleap --json patent search --query "<CQL from step 1>" --limit 20
 flowleap --json uspto search --query "<recommended_query from step 1>" --limit 20
 ```
 
+Run **both** — they are different databases, not interchangeable:
+
+- `patent search` hits EPO OPS: worldwide DOCDB coverage, including EPO's own
+  bibliographic copy of US documents. `--countries US` narrows this EPO
+  collection to US members; it does **not** reach USPTO's Open Data Portal.
+- `uspto search` hits USPTO ODP directly, returning US application and
+  prosecution metadata (the `patentFileWrapperDataBag`) that the EPO copy lacks.
+
+So for US prior art, the USPTO leg must go through `uspto build-query` →
+`uspto search`. Do not substitute `patent search --countries US` for it — that
+returns EPO's bibliographic copy of US documents, not USPTO ODP records.
+
 Done when both databases have returned ranked results.
 
 ### Step 3: Search Academic Literature
