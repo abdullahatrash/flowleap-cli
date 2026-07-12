@@ -48,6 +48,20 @@ flowleap skills install --project    # → .claude/skills
 flowleap skills install --dir <path> # any other agent
 ```
 
+## Keep FlowLeap Updated
+
+One command upgrades the CLI on any install channel (npm, Homebrew, install.sh
+binary, cargo) — no need to know which one you're on:
+
+```bash
+flowleap upgrade --check   # channel + versions, no changes (add --json to branch on it)
+flowleap upgrade           # upgrade in place; skill content refreshes separately
+flowleap skills update     # refresh installed skill files after upgrading
+```
+
+`upgrade --check --json` returns `{ channel, currentVersion, latestVersion,
+updateAvailable, command }` so an agent can decide whether to act.
+
 ## Skill Map
 
 - Shared reference: `flowleap-shared` (auth, flags, config), `flowleap-auth`, `flowleap-keys`

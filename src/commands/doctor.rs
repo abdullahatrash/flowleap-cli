@@ -69,11 +69,40 @@ pub async fn run(ctx: &Context) -> Result<()> {
             "errorKind": error_kind,
             "hint": hint,
         },
+        "cli": cli_status(),
         "skills": crate::commands::skills::doctor_skills_status(env!("CARGO_PKG_VERSION")),
     });
 
     output::print_value(&ctx.output_format, &report, &[]);
     Ok(())
+}
+
+/// CLI self-status: install channel and any known-available upgrade, read
+/// from the daily update cache (no extra network call) so doctor stays
+/// offline-safe. Always recommends the channel-aware `flowleap upgrade`.
+fn cli_status() -> serde_json::Value {
+    let current = env!("CARGO_PKG_VERSION");
+    let channel = crate::commands::upgrade::current_channel();
+    let latest = crate::update::cached_latest();
+    let update_available = latest
+        .as_deref()
+        .map(|l| crate::update::is_newer(l, current));
+    let hint = if update_available == Some(true) {
+        Some(format!(
+            "flowleap {} is available (you have {current}) — run 'flowleap upgrade'",
+            latest.as_deref().unwrap_or_default()
+        ))
+    } else {
+        None
+    };
+    json!({
+        "channel": channel.as_str(),
+        "currentVersion": current,
+        "latestVersion": latest,
+        "updateAvailable": update_available,
+        "upgradeCommand": "flowleap upgrade",
+        "hint": hint,
+    })
 }
 
 fn classify_error(message: &str) -> (&'static str, &'static str) {

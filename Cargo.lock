@@ -352,6 +352,7 @@ dependencies = [
  "indicatif",
  "open",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "shell-words",

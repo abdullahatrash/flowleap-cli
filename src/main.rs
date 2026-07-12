@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{error::ErrorKind, Parser, Subcommand};
 use flowleap_cli::commands::{
     academic, analytics, analyze_claim, api, auth, citation, config_cmd, doctor, facade, health,
-    keys, legal, mcp, npl, ocr, ops, patent, skills, tools, uspto,
+    keys, legal, mcp, npl, ocr, ops, patent, skills, tools, upgrade, uspto,
 };
 use flowleap_cli::{client, config, update};
 use serde_json::json;
@@ -107,6 +107,9 @@ enum Commands {
     Skills(skills::SkillsArgs),
     /// Manage CLI configuration
     Config(config_cmd::ConfigArgs),
+    /// Upgrade the CLI itself (channel-aware: npm/brew/binary/cargo)
+    #[command(alias = "update")]
+    Upgrade(upgrade::UpgradeArgs),
 }
 
 #[tokio::main]
@@ -253,7 +256,7 @@ async fn run(cli: Cli) -> Result<()> {
     // Once-a-day update notice. Spawned before the command so the registry
     // fetch overlaps its work; printed to stderr after it finishes. Never
     // runs in MCP server mode: the process is a long-lived protocol server.
-    let update_check = if matches!(cli.command, Commands::Mcp(_)) {
+    let update_check = if matches!(cli.command, Commands::Mcp(_) | Commands::Upgrade(_)) {
         None
     } else {
         update::spawn_check(&ctx.http, cli.json, cli.dry_run)
@@ -300,6 +303,7 @@ fn command_needs_auth(command: &Commands) -> bool {
             | Commands::Skills(_)
             | Commands::Config(_)
             | Commands::Mcp(_)
+            | Commands::Upgrade(_)
     )
 }
 
@@ -349,6 +353,7 @@ async fn dispatch(command: Commands, ctx: &client::Context) -> Result<()> {
         Commands::Mcp(args) => mcp::run(ctx, args).await,
         Commands::Skills(args) => skills::run(ctx, args),
         Commands::Config(args) => config_cmd::run(ctx, args).await,
+        Commands::Upgrade(args) => upgrade::run(ctx, args).await,
     }
 }
 
