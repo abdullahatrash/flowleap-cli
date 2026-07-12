@@ -15,7 +15,7 @@ Draft claims that are novel over the closest art and formally sound.
 Claims drafted blind get rejected. Anchor on the art before writing:
 
 ```bash
-flowleap patent build-query "<invention description>" --focus precise
+flowleap patent build-query "<invention description>" --focus precise --allow-external-processing
 flowleap --json patent search --query "<generated CQL>" --limit 20
 flowleap --json uspto search --query "<generated CQL>" --limit 20   # ODP Lucene syntax
 ```

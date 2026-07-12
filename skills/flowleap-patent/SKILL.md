@@ -71,22 +71,25 @@ flowleap patent build-query <description> [flags]
 
 Posts to `/v1/build-patent-query`. Converts natural language to CQL (Common Query Language) for EPO patent searches.
 Use `--dry-run` to verify the request shape without calling the backend model.
+Live calls send the description to FlowLeap and then to Anthropic or OpenAI,
+so they require `--allow-external-processing`.
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--focus` | Strategy: `broad`, `precise`, `comprehensive` | `comprehensive` |
+| `--allow-external-processing` | Consent to FlowLeap and external-LLM processing | `false` |
 
 #### Examples
 
 ```bash
 # Natural language to CQL
-flowleap patent build-query "patents about lithium battery recycling filed by Tesla"
+flowleap patent build-query "patents about lithium battery recycling filed by Tesla" --allow-external-processing
 
 # With a strategy focus
-flowleap patent build-query "renewable energy storage systems" --focus comprehensive
+flowleap patent build-query "renewable energy storage systems" --focus comprehensive --allow-external-processing
 
 # JSON output
-flowleap patent build-query --json "autonomous vehicle lidar sensors"
+flowleap patent build-query --json "autonomous vehicle lidar sensors" --allow-external-processing
 ```
 
 #### Response Format (JSON)
@@ -100,5 +103,5 @@ flowleap patent build-query --json "autonomous vehicle lidar sensors"
 
 ## Workflow: Natural Language to Patent Results
 
-1. Build a CQL query: `flowleap patent build-query "your description"`
+1. Build a CQL query: `flowleap patent build-query "your description" --allow-external-processing`
 2. Use the generated CQL in a search: `flowleap patent search --query "<CQL>"`

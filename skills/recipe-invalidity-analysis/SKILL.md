@@ -36,7 +36,7 @@ Every element in the list must be found in the art — track them as a checklist
 
 ```bash
 # Patent art, both databases
-flowleap patent build-query "<element combination in plain language>" --focus broad
+flowleap patent build-query "<element combination in plain language>" --focus broad --allow-external-processing
 flowleap --json patent search --query "<generated CQL>" --limit 30
 flowleap --json uspto search --query "<generated CQL>" --limit 30   # ODP Lucene syntax
 

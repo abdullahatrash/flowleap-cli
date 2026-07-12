@@ -17,9 +17,15 @@ its own query syntax — see `flowleap-uspto` for the USPTO Lucene grammar.
 
 ```bash
 # --focus broad widens recall for a first novelty pass
-flowleap patent build-query "<describe the invention in natural language>" --focus broad
-flowleap uspto build-query "<describe the invention in natural language>" --focus broad
+flowleap patent build-query "<describe the invention in natural language>" --focus broad --allow-external-processing
+flowleap uspto build-query "<describe the invention in natural language>" --focus broad --allow-external-processing
 ```
+
+These live builders transmit the invention description to FlowLeap and its
+configured Anthropic or OpenAI provider. Obtain informed user consent before
+using `--allow-external-processing`. For a local preview, use
+`--dry-run --dry-run-redacted`; if external processing is not permitted, write
+the CQL/ODP query manually and skip the builder commands.
 
 Done when you have one EPO CQL query and one USPTO ODP query for the invention.
 

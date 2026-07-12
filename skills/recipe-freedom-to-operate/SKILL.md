@@ -20,9 +20,9 @@ Build a query per key product feature, in each database's own syntax:
 
 ```bash
 # EPO CQL
-flowleap patent build-query "<feature 1 description>"
+flowleap patent build-query "<feature 1 description>" --allow-external-processing
 # USPTO ODP
-flowleap uspto build-query "<feature 1 description>"
+flowleap uspto build-query "<feature 1 description>" --allow-external-processing
 # Repeat for each feature
 ```
 

@@ -28,7 +28,7 @@ Interview for these sections (push past marketing language to mechanisms):
 ## Step 2: Novelty Pre-Check
 
 ```bash
-flowleap patent build-query "<inventive concept in plain language>"
+flowleap patent build-query "<inventive concept in plain language>" --allow-external-processing
 flowleap --json patent search --query "<generated CQL>" --limit 20
 flowleap --json uspto search --query "<generated CQL>" --limit 20   # ODP Lucene syntax
 

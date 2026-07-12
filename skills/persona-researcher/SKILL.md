@@ -35,11 +35,11 @@ Done when both the academic and patent corpora have been searched for the topic.
 
 ```bash
 # EPO side: natural language to CQL
-flowleap patent build-query "machine learning methods for drug discovery"
+flowleap patent build-query "machine learning methods for drug discovery" --allow-external-processing
 flowleap --json patent search --query "<CQL from build-query>" --limit 30
 
 # US side: build an ODP query, then search with it (see flowleap-uspto)
-flowleap uspto build-query "machine learning methods for drug discovery"
+flowleap uspto build-query "machine learning methods for drug discovery" --allow-external-processing
 flowleap --json uspto search --query "<recommended_query from build-query>" --limit 30
 ```
 

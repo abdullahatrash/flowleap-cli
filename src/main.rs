@@ -36,6 +36,10 @@ struct Cli {
     #[arg(long, global = true)]
     dry_run: bool,
 
+    /// Redact sensitive request values from dry-run output
+    #[arg(long, global = true, requires = "dry_run")]
+    dry_run_redacted: bool,
+
     /// Show verbose request/response details
     #[arg(long, short, global = true)]
     verbose: bool,
@@ -237,6 +241,7 @@ async fn run(cli: Cli) -> Result<()> {
         credentials: creds,
         output_format,
         dry_run: cli.dry_run,
+        dry_run_redacted: cli.dry_run_redacted,
         verbose: cli.verbose,
         token_overridden: cli.token.is_some(),
         assume_yes: cli.yes,

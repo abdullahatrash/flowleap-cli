@@ -63,6 +63,10 @@ enum UsptoCommand {
         /// Query strategy focus
         #[arg(long, value_parser = ["broad", "precise", "comprehensive"], default_value = "comprehensive")]
         focus: String,
+
+        /// Consent to send the description to FlowLeap and its configured LLM provider
+        #[arg(long)]
+        allow_external_processing: bool,
     },
 }
 
@@ -79,7 +83,15 @@ pub async fn run(ctx: &Context, args: UsptoArgs) -> Result<()> {
         UsptoCommand::Grant { patent_number } => grant(ctx, &patent_number).await,
         UsptoCommand::Application { app_number } => application(ctx, &app_number).await,
         UsptoCommand::Continuity { app_number } => continuity(ctx, &app_number).await,
-        UsptoCommand::BuildQuery { description, focus } => {
+        UsptoCommand::BuildQuery {
+            description,
+            focus,
+            allow_external_processing,
+        } => {
+            super::query_privacy::require_external_processing_consent(
+                ctx,
+                allow_external_processing,
+            )?;
             build_query(ctx, &description, &focus).await
         }
     }

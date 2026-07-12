@@ -33,7 +33,7 @@ flowleap --json npl "<research topic>" --from-year 2020 --limit 10
 ### Step 3: Patent Search for the Same Topic
 
 ```bash
-flowleap patent build-query "<research topic>"
+flowleap patent build-query "<research topic>" --allow-external-processing
 flowleap --json patent search --query "<CQL from build-query>" --limit 20
 ```
 

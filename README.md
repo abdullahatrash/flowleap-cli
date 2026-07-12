@@ -166,7 +166,7 @@ A sampler:
 ```bash
 # Patents
 flowleap patent search --query "lithium battery recycling" --limit 5
-flowleap patent build-query "patents about lithium battery recycling filed by Tesla" --dry-run
+flowleap patent build-query "patents about lithium battery recycling filed by Tesla" --dry-run --dry-run-redacted
 flowleap uspto search --query "wireless charging" --limit 3
 flowleap uspto grant 11800000
 flowleap ops biblio EP1234567
@@ -293,6 +293,23 @@ Use `--dry-run` to see the exact method, URL, auth status, and JSON body the CLI
 flowleap --json patent search --query "battery cooling system" --limit 1 --dry-run
 ```
 
+Add `--dry-run-redacted` when the body contains an unpublished invention,
+claim, search query, document text, or URL. The output retains the JSON shape
+but replaces sensitive values with `[REDACTED]`.
+
+Natural-language query builders are cloud operations: the description goes to
+the FlowLeap backend and then to its configured Anthropic or OpenAI provider.
+Live `patent build-query` and `uspto build-query` calls therefore require
+explicit consent:
+
+```bash
+flowleap --json patent build-query "<description>" --focus broad --allow-external-processing
+flowleap --json uspto build-query "<description>" --focus broad --allow-external-processing
+```
+
+If the description must not leave the machine, write CQL or an ODP request
+body directly and use `patent search --query` or `uspto search --body-file`.
+
 The full contract (hint schemas, endpoint list, agent protocol) lives in [AGENTS.md](AGENTS.md).
 
 ## Cookbook: Recipe Skills
@@ -395,6 +412,7 @@ Precedence: CLI flags > environment variables > config file.
 --api-key <key>     Override stored API key
 --token <token>     Override stored token
 --dry-run           Show request details without executing
+--dry-run-redacted  Redact sensitive values from dry-run output (requires --dry-run)
 --yes               Assume "yes" for confirmation prompts
 --verbose, -v       Show verbose request/response details
 ```

@@ -21,11 +21,11 @@ skills for the full workflow. Shared conventions stay in their owner skills:
 
 ```bash
 # EPO side: natural language to CQL, then search
-flowleap patent build-query "wireless charging for electric vehicles using inductive coupling"
+flowleap patent build-query "wireless charging for electric vehicles using inductive coupling" --allow-external-processing
 flowleap patent search --query "ti=wireless AND ti=charging AND ti=inductive" --limit 20
 
 # US side: build an ODP query, then search with it (see flowleap-uspto)
-flowleap uspto build-query "wireless charging for electric vehicles using inductive coupling"
+flowleap uspto build-query "wireless charging for electric vehicles using inductive coupling" --allow-external-processing
 flowleap --json uspto search --query "<recommended_query from build-query>" --limit 20
 
 # Pull claims for the closest hits
