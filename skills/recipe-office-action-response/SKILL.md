@@ -3,7 +3,7 @@ name: recipe-office-action-response
 description: Prosecution recipe for turning an office action into a structured draft response — OCR the OA, pull every cited reference's claims and bibliography, map rejections element-by-element, and ground arguments in MPEP/EPO guideline citations. Trigger when the user asks to respond to an office action, analyze examiner rejections, or prepare arguments against novelty/obviousness (102/103, Art. 54/56) objections.
 metadata:
   requires:
-    skills: ["flowleap-shared", "flowleap-ops", "flowleap-legal", "flowleap-citation"]
+    skills: ["flowleap-shared", "flowleap-ops", "flowleap-legal", "flowleap-citation", "flowleap-uspto"]
 ---
 
 # Recipe: Office Action Response
@@ -11,6 +11,18 @@ metadata:
 Turn an office action (OA) into a structured, evidence-backed draft response.
 
 ## Step 1: Intake — Read the Office Action
+
+For a US application, fetch the OA straight from the USPTO file wrapper — no
+local PDF needed. List the office actions, then pull the text (OCR'd
+server-side):
+
+```bash
+flowleap --json uspto documents <application-number> --code CTNF   # non-final rejections
+flowleap --json uspto documents <application-number> --code CTFR   # final rejections
+flowleap uspto document-text <application-number> <documentIdentifier> > office-action.md
+```
+
+If the OA was supplied as a local file instead (or is not a US application):
 
 ```bash
 flowleap ocr ./office-action.pdf > office-action.md

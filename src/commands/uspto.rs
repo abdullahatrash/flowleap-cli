@@ -55,6 +55,62 @@ enum UsptoCommand {
         /// Application number
         app_number: String,
     },
+    /// Prosecution transaction/event history (filings, office actions, fees)
+    Transactions {
+        /// Application number
+        app_number: String,
+    },
+    /// Recorded assignments — reel/frame, assignors, assignees (chain of title)
+    Assignments {
+        /// Application number
+        app_number: String,
+    },
+    /// Foreign priority claims (filing date, application number, IP office)
+    ForeignPriority {
+        /// Application number
+        app_number: String,
+    },
+    /// Official patent term adjustment (PTA) day counts and history
+    Adjustment {
+        /// Application number
+        app_number: String,
+    },
+    /// Attorney/agent of record — power of attorney, customer number
+    Attorney {
+        /// Application number
+        app_number: String,
+    },
+    /// Grant/pgpub bulk-dataset XML pointers
+    AssociatedDocuments {
+        /// Application number
+        app_number: String,
+    },
+    /// List Image File Wrapper (IFW) documents — office actions, responses, notices
+    Documents {
+        /// Application number
+        app_number: String,
+
+        /// Filter by USPTO document code (e.g. CTNF, CTFR, NOA, CLM, REM)
+        #[arg(long)]
+        code: Option<String>,
+
+        /// Filter by direction: INCOMING (applicant→office) or OUTGOING (office→applicant)
+        #[arg(long, value_parser = ["incoming", "outgoing"])]
+        direction: Option<String>,
+    },
+    /// Fetch one IFW document as OCR-extracted markdown text
+    ///
+    /// Downloads the document PDF from USPTO ODP and OCRs it server-side (most
+    /// IFW documents are scanned images with no text layer). Get the document
+    /// id from `uspto documents`. First read of a long document can take tens
+    /// of seconds; results are cached server-side for 7 days.
+    DocumentText {
+        /// Application number
+        app_number: String,
+
+        /// IFW documentIdentifier from `uspto documents` (e.g. LAQYXZN3XBLUEX4)
+        document_id: String,
+    },
     /// Build a USPTO ODP Lucene query from natural language
     BuildQuery {
         /// Natural language description
@@ -83,6 +139,66 @@ pub async fn run(ctx: &Context, args: UsptoArgs) -> Result<()> {
         UsptoCommand::Grant { patent_number } => grant(ctx, &patent_number).await,
         UsptoCommand::Application { app_number } => application(ctx, &app_number).await,
         UsptoCommand::Continuity { app_number } => continuity(ctx, &app_number).await,
+        UsptoCommand::Transactions { app_number } => {
+            wrapper_bag(
+                ctx,
+                &app_number,
+                "transactions",
+                "eventDataBag",
+                event_columns(),
+            )
+            .await
+        }
+        UsptoCommand::Assignments { app_number } => {
+            wrapper_bag(
+                ctx,
+                &app_number,
+                "assignment",
+                "assignmentBag",
+                assignment_columns(),
+            )
+            .await
+        }
+        UsptoCommand::ForeignPriority { app_number } => {
+            wrapper_bag(
+                ctx,
+                &app_number,
+                "foreign-priority",
+                "foreignPriorityBag",
+                foreign_priority_columns(),
+            )
+            .await
+        }
+        UsptoCommand::Adjustment { app_number } => {
+            wrapper_bag(
+                ctx,
+                &app_number,
+                "adjustment",
+                "patentTermAdjustmentData",
+                adjustment_columns(),
+            )
+            .await
+        }
+        UsptoCommand::Attorney { app_number } => {
+            wrapper_bag(ctx, &app_number, "attorney", "recordAttorney", &[]).await
+        }
+        UsptoCommand::AssociatedDocuments { app_number } => {
+            // The grant/pgpub metadata live as sibling keys, not one bag — print
+            // the record as-is.
+            let result =
+                fetch_wrapper_sub_resource(ctx, &app_number, "associated-documents").await?;
+            output::print_value(&ctx.output_format, &result, &[]);
+            Ok(())
+        }
+        UsptoCommand::Documents {
+            app_number,
+            code,
+            direction,
+        } => documents(ctx, &app_number, code.as_deref(), direction.as_deref()).await,
+        UsptoCommand::DocumentText {
+            app_number,
+            document_id,
+        } => document_text(ctx, &app_number, &document_id).await,
         UsptoCommand::BuildQuery {
             description,
             focus,
@@ -358,6 +474,210 @@ async fn continuity(ctx: &Context, app_number: &str) -> Result<()> {
     Ok(())
 }
 
+/// GET a file-wrapper sub-resource:
+/// `/v1/patent-search-uspto/applications/{app}/{segment}`.
+async fn fetch_wrapper_sub_resource(
+    ctx: &Context,
+    app_number: &str,
+    segment: &str,
+) -> Result<Value> {
+    let path = format!(
+        "/v1/patent-search-uspto/applications/{}/{segment}",
+        encode_url_component(app_number)
+    );
+    ctx.execute_json_body_or_error(ctx.get(&path)).await
+}
+
+/// Fetch a sub-resource and print the named inner value from the first file
+/// wrapper record (arrays get `columns`; objects fall back to JSON via the
+/// formatter). JSON output always prints the full envelope untouched so agents
+/// keep the verbatim backend shape.
+async fn wrapper_bag(
+    ctx: &Context,
+    app_number: &str,
+    segment: &str,
+    inner_key: &str,
+    columns: &[(&str, &str)],
+) -> Result<()> {
+    let result = fetch_wrapper_sub_resource(ctx, app_number, segment).await?;
+    if ctx.output_format == "json" || result.get("dryRun").is_some() {
+        output::print_json(&result);
+        return Ok(());
+    }
+    let inner = result
+        .get("patentFileWrapperDataBag")
+        .and_then(|bag| bag.get(0))
+        .and_then(|record| record.get(inner_key));
+    match inner {
+        Some(value) => output::print_value(&ctx.output_format, value, columns),
+        None => output::print_value(&ctx.output_format, &result, columns),
+    }
+    Ok(())
+}
+
+async fn documents(
+    ctx: &Context,
+    app_number: &str,
+    code: Option<&str>,
+    direction: Option<&str>,
+) -> Result<()> {
+    let result = fetch_wrapper_sub_resource(ctx, app_number, "documents").await?;
+    if result.get("dryRun").is_some() {
+        output::print_json(&result);
+        return Ok(());
+    }
+
+    let docs = result
+        .get("documentBag")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let total = docs.len();
+    let filtered: Vec<Value> = docs
+        .into_iter()
+        .filter(|doc| {
+            code.is_none_or(|wanted| {
+                doc.get("documentCode")
+                    .and_then(Value::as_str)
+                    .is_some_and(|c| c.eq_ignore_ascii_case(wanted))
+            })
+        })
+        .filter(|doc| {
+            direction.is_none_or(|wanted| {
+                doc.get("directionCategory")
+                    .and_then(Value::as_str)
+                    .is_some_and(|d| d.eq_ignore_ascii_case(wanted))
+            })
+        })
+        .map(flatten_document_record)
+        .collect();
+
+    if ctx.output_format == "json" {
+        output::print_json(&json!({
+            "applicationNumber": app_number,
+            "total": total,
+            "returned": filtered.len(),
+            "documents": filtered,
+        }));
+        return Ok(());
+    }
+    if filtered.is_empty() && total > 0 {
+        eprintln!(
+            "note: {total} document(s) exist but none match the filter. \
+             Drop --code/--direction to list them all."
+        );
+    }
+    output::print_value(
+        &ctx.output_format,
+        &Value::Array(filtered),
+        document_columns(),
+    );
+    Ok(())
+}
+
+/// Compact one IFW document record for display: keep the identifying fields and
+/// surface the PDF page count from `downloadOptionBag` as a top-level `pages`.
+fn flatten_document_record(doc: Value) -> Value {
+    let pages = doc
+        .get("downloadOptionBag")
+        .and_then(Value::as_array)
+        .and_then(|options| {
+            options.iter().find_map(|option| {
+                (option.get("mimeTypeIdentifier").and_then(Value::as_str) == Some("PDF"))
+                    .then(|| option.get("pageTotalQuantity").cloned())
+                    .flatten()
+            })
+        })
+        .unwrap_or(Value::Null);
+    json!({
+        "documentIdentifier": doc.get("documentIdentifier").cloned().unwrap_or(Value::Null),
+        "documentCode": doc.get("documentCode").cloned().unwrap_or(Value::Null),
+        "description": doc.get("documentCodeDescriptionText").cloned().unwrap_or(Value::Null),
+        "officialDate": doc.get("officialDate").cloned().unwrap_or(Value::Null),
+        "direction": doc.get("directionCategory").cloned().unwrap_or(Value::Null),
+        "pages": pages,
+    })
+}
+
+async fn document_text(ctx: &Context, app_number: &str, document_id: &str) -> Result<()> {
+    let path = format!(
+        "/v1/patent-search-uspto/applications/{}/documents/{}/text",
+        encode_url_component(app_number),
+        encode_url_component(document_id)
+    );
+    let result = ctx.execute_json_body_or_error(ctx.get(&path)).await?;
+    if ctx.output_format == "json" || result.get("dryRun").is_some() {
+        output::print_json(&result);
+        return Ok(());
+    }
+    // Human/table: the markdown itself is the payload — keep stdout clean text
+    // (pipeable into a file or pager) and put the metadata line on stderr.
+    if let (Some(pages), Some(model)) = (
+        result.get("pageCount").and_then(Value::as_u64),
+        result.get("model").and_then(Value::as_str),
+    ) {
+        let cached = result
+            .get("cached")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        eprintln!(
+            "{document_id}: {pages} page(s), OCR model {model}{}",
+            if cached { " (cached)" } else { "" }
+        );
+    }
+    match result.get("markdown").and_then(Value::as_str) {
+        Some(markdown) => println!("{markdown}"),
+        None => output::print_json(&result),
+    }
+    Ok(())
+}
+
+fn event_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("eventDate", "Date"),
+        ("eventCode", "Code"),
+        ("eventDescriptionText", "Event"),
+    ]
+}
+
+fn assignment_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("assignmentRecordedDate", "Recorded"),
+        ("reelAndFrameNumber", "Reel/Frame"),
+        ("conveyanceText", "Conveyance"),
+    ]
+}
+
+fn foreign_priority_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("filingDate", "Filed"),
+        ("applicationNumberText", "Application #"),
+        ("ipOfficeName", "IP Office"),
+    ]
+}
+
+fn adjustment_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("adjustmentTotalQuantity", "Total PTA (days)"),
+        ("aDelayQuantity", "A delay"),
+        ("bDelayQuantity", "B delay"),
+        ("cDelayQuantity", "C delay"),
+        ("applicantDayDelayQuantity", "Applicant delay"),
+        ("overlappingDayQuantity", "Overlap"),
+    ]
+}
+
+fn document_columns() -> &'static [(&'static str, &'static str)] {
+    &[
+        ("documentIdentifier", "Document ID"),
+        ("officialDate", "Date"),
+        ("documentCode", "Code"),
+        ("description", "Description"),
+        ("direction", "Direction"),
+        ("pages", "Pages"),
+    ]
+}
+
 async fn build_query(ctx: &Context, description: &str, focus: &str) -> Result<()> {
     let body = json!({
         "description": description,
@@ -563,6 +883,32 @@ mod tests {
         assert!(build_search_request(None, Some(r#"{"fields":[]}"#), None, 10).is_err());
         // Nothing provided is a usage error.
         assert!(build_search_request(None, None, None, 10).is_err());
+    }
+
+    #[test]
+    fn flatten_document_record_extracts_pdf_page_count() {
+        let record = json!({
+            "applicationNumberText": "14412875",
+            "officialDate": "2020-01-17T08:33:20.000-0500",
+            "documentIdentifier": "K5FCIIKNRXEAPX5",
+            "documentCode": "CTFR",
+            "documentCodeDescriptionText": "Final Rejection",
+            "directionCategory": "OUTGOING",
+            "downloadOptionBag": [
+                { "mimeTypeIdentifier": "XML", "downloadUrl": "https://x/doc.xml" },
+                { "mimeTypeIdentifier": "PDF", "downloadUrl": "https://x/doc.pdf", "pageTotalQuantity": 12 },
+            ],
+        });
+        let flat = flatten_document_record(record);
+        assert_eq!(flat["documentIdentifier"], "K5FCIIKNRXEAPX5");
+        assert_eq!(flat["description"], "Final Rejection");
+        assert_eq!(flat["direction"], "OUTGOING");
+        assert_eq!(flat["pages"], 12);
+
+        // Records without a PDF option (or any downloadOptionBag) stay printable.
+        let bare = flatten_document_record(json!({ "documentIdentifier": "X1" }));
+        assert_eq!(bare["documentIdentifier"], "X1");
+        assert_eq!(bare["pages"], Value::Null);
     }
 
     #[test]
