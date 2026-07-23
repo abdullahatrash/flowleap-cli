@@ -16,6 +16,18 @@ command -v flowleap || true
 flowleap --json doctor
 ```
 
+**CLI not installed?** Install it first — npm when Node is present, the
+install script otherwise:
+
+```
+npm install -g flowleap
+curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
+```
+
+Then authenticate: `flowleap auth login` opens a device-code sign-in (a free
+FlowLeap account is created at flowleap.co if you don't have one). Headless
+agents use a `fl_pat_` API token instead — see `flowleap-auth`.
+
 `doctor` targets the production backend (https://api.flowleap.co) by default —
 no `--base-url` needed. Developing the FlowLeap backend itself? Add
 `--base-url http://localhost:8000` to point at a local server.
