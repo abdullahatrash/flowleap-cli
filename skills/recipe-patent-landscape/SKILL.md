@@ -3,7 +3,7 @@ name: recipe-patent-landscape
 description: Patent-landscape analysis for a technology area — scoped dual-database search, key-player identification, full-corpus filing analytics, and CPC-versus-year white-space detection. Trigger when the user asks to map a technology space, identify who patents in an area, or report filing trends and white space.
 metadata:
   requires:
-    skills: ["flowleap-shared", "flowleap-patent", "flowleap-uspto", "flowleap-ops"]
+    skills: ["flowleap-shared", "flowleap-patent", "flowleap-uspto", "flowleap-ops", "recipe-custom-dashboard"]
 ---
 
 # Recipe: Patent Landscape Analysis
@@ -73,3 +73,12 @@ trend charts (filings per year, top assignees, CPC and country distributions).
 When tallying players or counts from the search results, collapse to one entry
 per patent **family** so multi-jurisdiction filings are not double-counted; the
 corpus `analytics` figures are aggregate backend counts, reported as returned.
+
+## Visual deliverable
+
+To turn Step 3's filing-trend numbers and Step 6's white-space finding into a
+shareable HTML dashboard, follow this recipe's analysis through to the end,
+then render it with `recipe-custom-dashboard` — its **landscape white-space**
+template (CPC × year heatmap) is built for this recipe's final step, and its
+**filing-trends** template covers Step 3's year-over-year counts. Analysis
+logic stays here; the dashboard skill only owns presentation.

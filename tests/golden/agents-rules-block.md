@@ -94,6 +94,13 @@ flowleap patent search --query <query> [flags]
 flowleap patent build-query <description> [flags]
 ```
 
+#### flowleap-patstat — Portfolio Analytics over the PATSTAT snapshot — structured-criteria aggregation by named applicant, CPC/IPC class, office, year, family, and grant status, with harmonized entity resolution and Data Edition provenance.
+
+```bash
+flowleap --json patstat portfolio "<applicant name>" --from-year 2015 --to-year 2023
+flowleap --json tools run patstat_portfolio applicant="<applicant name>"
+```
+
 #### flowleap-shared — Shared reference for every FlowLeap skill — authentication (OAuth device flow, fl_pat_ personal API tokens), credential storage, config precedence, global flags, and output formats.
 
 ```bash

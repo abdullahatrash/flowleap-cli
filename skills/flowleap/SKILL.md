@@ -31,6 +31,9 @@ no `--base-url` needed. Developing the FlowLeap backend itself? Add
 - **EPO document data** (biblio, claims, description, family, legal) → `flowleap-ops`.
 - **Academic / non-patent literature** → `flowleap-academic`, `flowleap-npl`.
 - **Patent-law RAG** → `flowleap-legal`; **enriched citations** → `flowleap-citation`.
+- **Portfolio Analytics** (structured criteria — named applicant, CPC/IPC,
+  office, year, family, grant status) → `flowleap-patstat`; free-text
+  keyword analytics (`flowleap analytics`, Topic Analytics) stay below.
 - **Agent-first tool facade** (`flowleap tools list|describe|run …`) and the
   one-call verbs `summary`, `timeline`, `compare` → `flowleap-tools`.
 - **Document utilities** — `flowleap figures <doc>`, `flowleap convert-number
@@ -65,7 +68,7 @@ updateAvailable, command }` so an agent can decide whether to act.
 ## Skill Map
 
 - Shared reference: `flowleap-shared` (auth, flags, config), `flowleap-auth`, `flowleap-keys`
-- Data sources: `flowleap-patent` (EPO CQL), `flowleap-uspto` (ODP Lucene), `flowleap-ops` (EPO documents), `flowleap-academic`, `flowleap-npl`, `flowleap-legal`, `flowleap-citation`, `flowleap-tools` (facade)
+- Data sources: `flowleap-patent` (EPO CQL), `flowleap-uspto` (ODP Lucene), `flowleap-ops` (EPO documents), `flowleap-academic`, `flowleap-npl`, `flowleap-legal`, `flowleap-citation`, `flowleap-patstat` (Portfolio Analytics), `flowleap-tools` (facade)
 - Personas: `persona-patent-attorney`, `persona-ip-analyst`, `persona-researcher`, `persona-startup-founder`
 - Recipes (search/analysis): `recipe-prior-art-search`, `recipe-patent-landscape`, `recipe-freedom-to-operate`, `recipe-claim-analysis`, `recipe-patent-to-report`, `recipe-academic-literature-review`
 - Recipes (prosecution/litigation, full pack only): `recipe-office-action-response`, `recipe-invalidity-analysis`, `recipe-infringement-charting`, `recipe-claim-drafting`, `recipe-invention-disclosure`, `recipe-audit-report`

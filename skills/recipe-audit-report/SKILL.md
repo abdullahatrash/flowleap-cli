@@ -3,7 +3,7 @@ name: recipe-audit-report
 description: Governance recipe for producing an auditable record of AI-assisted patent research — reproducible command log, data provenance for every finding, portfolio status verification, and an AI-usage disclosure section suitable for internal or filing-adjacent records. Trigger when the user asks for an audit trail of patent research, an AI-assistance disclosure, or a verifiable methodology write-up of analysis work.
 metadata:
   requires:
-    skills: ["flowleap-shared", "flowleap-tools"]
+    skills: ["flowleap-shared", "flowleap-tools", "recipe-custom-dashboard"]
 ---
 
 # Recipe: Audit Report (AI-Assisted Research)
@@ -66,6 +66,15 @@ For filings, check the current duty-of-disclosure guidance:
 ```bash
 flowleap --json legal search "duty of candor AI assisted tools" --jurisdiction uspto
 ```
+
+## Visual deliverable
+
+If the research being audited produced a `recipe-custom-dashboard` bundle,
+cite it rather than re-deriving its numbers: the bundle's own provenance
+footer and reproduce block already meet this recipe's Verified-Data Contract
+bar (sources, parameters, Data Edition where applicable, timestamps),
+so Steps 1–4 can point at that bundle instead of re-collecting the same
+evidence by hand.
 
 ## Output
 
