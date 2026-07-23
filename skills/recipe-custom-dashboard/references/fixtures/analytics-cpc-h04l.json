@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "searchDescription": "keywords: machine learning; cpc: H04L",
+  "request": {
+    "keywords": [
+      "machine learning"
+    ],
+    "cpc": [
+      "H04L"
+    ],
+    "dateFrom": "2015-01-01",
+    "dateTo": "2024-12-31"
+  },
+  "analytics": {
+    "byYear": [
+      {
+        "year": 2015,
+        "count": 280
+      },
+      {
+        "year": 2016,
+        "count": 300
+      },
+      {
+        "year": 2017,
+        "count": 330
+      },
+      {
+        "year": 2018,
+        "count": 360
+      },
+      {
+        "year": 2019,
+        "count": 400
+      },
+      {
+        "year": 2020,
+        "count": 430
+      },
+      {
+        "year": 2021,
+        "count": 470
+      },
+      {
+        "year": 2022,
+        "count": 500
+      },
+      {
+        "year": 2023,
+        "count": 540
+      },
+      {
+        "year": 2024,
+        "count": 560
+      }
+    ],
+    "byCountry": [
+      {
+        "country": "US",
+        "count": 2085
+      }
+    ],
+    "topAssignees": [
+      {
+        "assignee": "IBM",
+        "count": 120
+      }
+    ],
+    "topCPC": [
+      {
+        "cpc": "H04L",
+        "count": 4170
+      }
+    ]
+  }
+}

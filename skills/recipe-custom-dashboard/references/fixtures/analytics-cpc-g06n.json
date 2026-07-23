@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "searchDescription": "keywords: machine learning; cpc: G06N",
+  "request": {
+    "keywords": [
+      "machine learning"
+    ],
+    "cpc": [
+      "G06N"
+    ],
+    "dateFrom": "2015-01-01",
+    "dateTo": "2024-12-31"
+  },
+  "analytics": {
+    "byYear": [
+      {
+        "year": 2015,
+        "count": 120
+      },
+      {
+        "year": 2016,
+        "count": 180
+      },
+      {
+        "year": 2017,
+        "count": 260
+      },
+      {
+        "year": 2018,
+        "count": 380
+      },
+      {
+        "year": 2019,
+        "count": 540
+      },
+      {
+        "year": 2020,
+        "count": 760
+      },
+      {
+        "year": 2021,
+        "count": 980
+      },
+      {
+        "year": 2022,
+        "count": 1180
+      },
+      {
+        "year": 2023,
+        "count": 1360
+      },
+      {
+        "year": 2024,
+        "count": 1520
+      }
+    ],
+    "byCountry": [
+      {
+        "country": "US",
+        "count": 3640
+      }
+    ],
+    "topAssignees": [
+      {
+        "assignee": "IBM",
+        "count": 120
+      }
+    ],
+    "topCPC": [
+      {
+        "cpc": "G06N",
+        "count": 7280
+      }
+    ]
+  }
+}

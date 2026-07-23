@@ -1,0 +1,109 @@
+{
+  "success": true,
+  "searchDescription": "keywords: machine learning; cpc: G06N, H04L, G06F, A61B, G16H",
+  "request": {
+    "keywords": [
+      "machine learning"
+    ],
+    "dateFrom": "2015-01-01",
+    "dateTo": "2024-12-31"
+  },
+  "analytics": {
+    "byYear": [
+      {
+        "year": 2015,
+        "count": 900
+      },
+      {
+        "year": 2016,
+        "count": 1200
+      },
+      {
+        "year": 2017,
+        "count": 1500
+      },
+      {
+        "year": 2018,
+        "count": 1680
+      },
+      {
+        "year": 2019,
+        "count": 1980
+      },
+      {
+        "year": 2020,
+        "count": 2280
+      },
+      {
+        "year": 2021,
+        "count": 2460
+      },
+      {
+        "year": 2022,
+        "count": 2760
+      },
+      {
+        "year": 2023,
+        "count": 3060
+      },
+      {
+        "year": 2024,
+        "count": 3240
+      }
+    ],
+    "byCountry": [
+      {
+        "country": "US",
+        "count": 7200
+      },
+      {
+        "country": "CN",
+        "count": 5100
+      },
+      {
+        "country": "EP",
+        "count": 2600
+      },
+      {
+        "country": "JP",
+        "count": 1400
+      }
+    ],
+    "topAssignees": [
+      {
+        "assignee": "IBM",
+        "count": 1400
+      },
+      {
+        "assignee": "GOOGLE",
+        "count": 1120
+      },
+      {
+        "assignee": "MICROSOFT",
+        "count": 980
+      }
+    ],
+    "topCPC": [
+      {
+        "cpc": "G06N",
+        "count": 4820
+      },
+      {
+        "cpc": "H04L",
+        "count": 3910
+      },
+      {
+        "cpc": "G06F",
+        "count": 3560
+      },
+      {
+        "cpc": "A61B",
+        "count": 2140
+      },
+      {
+        "cpc": "G16H",
+        "count": 1180
+      }
+    ]
+  }
+}
