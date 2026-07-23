@@ -8,7 +8,7 @@ if (!bin) {
     bin = await ensureBinary();
   } catch (err) {
     console.error(`flowleap: could not fetch the native binary: ${err.message}`);
-    console.error("Retry, or download it manually from https://github.com/abdullahatrash/flowleap-cli/releases");
+    console.error("Retry, or download it manually from https://github.com/flowleap-ai/flowleap-cli/releases");
     process.exit(1);
   }
 }

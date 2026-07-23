@@ -28,14 +28,14 @@ use crate::client::Context;
 use crate::output;
 use crate::update::is_newer;
 
-const REPO: &str = "abdullahatrash/flowleap-cli";
+const REPO: &str = "flowleap-ai/flowleap-cli";
 const NPM_REGISTRY_URL: &str = "https://registry.npmjs.org/flowleap/latest";
 const GITHUB_LATEST_RELEASE_URL: &str =
-    "https://api.github.com/repos/abdullahatrash/flowleap-cli/releases/latest";
+    "https://api.github.com/repos/flowleap-ai/flowleap-cli/releases/latest";
 const INSTALL_SH_URL: &str =
-    "https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh";
+    "https://raw.githubusercontent.com/flowleap-ai/flowleap-cli/main/install.sh";
 const CARGO_INSTALL_CMD: &str =
-    "cargo install --git https://github.com/abdullahatrash/flowleap-cli --force";
+    "cargo install --git https://github.com/flowleap-ai/flowleap-cli --force";
 /// Binary downloads can be several MB on a slow link; give them a much longer
 /// ceiling than the 30s default the shared client uses for JSON API calls.
 const DOWNLOAD_TIMEOUT_SECS: u64 = 300;

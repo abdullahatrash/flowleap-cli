@@ -20,7 +20,7 @@ import { homedir } from "os";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO = "abdullahatrash/flowleap-cli";
+const REPO = "flowleap-ai/flowleap-cli";
 const isWindows = process.platform === "win32";
 const binaryName = isWindows ? "flowleap-native.exe" : "flowleap-native";
 

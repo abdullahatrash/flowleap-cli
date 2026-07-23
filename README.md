@@ -215,7 +215,7 @@ The npm package has no install scripts. The native binary is downloaded on first
 **Shell installer (macOS / Linux):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/flowleap-ai/flowleap-cli/main/install.sh | sh
 ```
 
 The script detects your platform, downloads the latest release binary, and verifies its sha256 against the release's `checksums.txt` before installing to `/usr/local/bin`.
@@ -223,10 +223,10 @@ The script detects your platform, downloads the latest release binary, and verif
 **From source (requires Rust):**
 
 ```bash
-cargo install --git https://github.com/abdullahatrash/flowleap-cli.git
+cargo install --git https://github.com/flowleap-ai/flowleap-cli.git
 ```
 
-Prebuilt release binaries cover macOS (x86_64, arm64), Linux (x86_64 and arm64 glibc, plus a static `flowleap-linux-x86_64-musl` build for Alpine/containers — download it directly from the [releases page](https://github.com/abdullahatrash/flowleap-cli/releases)), and Windows (x86_64).
+Prebuilt release binaries cover macOS (x86_64, arm64), Linux (x86_64 and arm64 glibc, plus a static `flowleap-linux-x86_64-musl` build for Alpine/containers — download it directly from the [releases page](https://github.com/flowleap-ai/flowleap-cli/releases)), and Windows (x86_64).
 
 **Updating:** `flowleap upgrade` updates the CLI on whichever channel installed it — no need to remember which. It runs `npm i -g flowleap@latest` for npm installs, `brew upgrade flowleap` for Homebrew, self-updates the raw binary in place (downloading the platform release asset and verifying its sha256 against `checksums.txt` before an atomic swap, exactly like first-run), and prints the `cargo install … --force` command for source installs. Use `flowleap upgrade --check` (add `--json` for agents) to see the channel and available version without changing anything. Upgrading the CLI doesn't touch already-installed skill files — run `flowleap skills update` for those.
 

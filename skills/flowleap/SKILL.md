@@ -21,7 +21,7 @@ install script otherwise:
 
 ```
 npm install -g flowleap
-curl -fsSL https://raw.githubusercontent.com/abdullahatrash/flowleap-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/flowleap-ai/flowleap-cli/main/install.sh | sh
 ```
 
 Then authenticate: `flowleap auth login` opens a device-code sign-in (a free
