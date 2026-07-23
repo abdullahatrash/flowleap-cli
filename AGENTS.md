@@ -28,7 +28,7 @@ All four must pass before submitting changes.
 | `src/commands/tools.rs` | Agent-first tool facade: list/describe/run `/v1/tools/*` |
 | `src/commands/skills.rs` | Embedded agent-skill installer (`skills/` baked into binary): multi-harness targets (claude/claude-project/codex/cursor/gemini/--dir), version stamps, `skills update` |
 | `src/commands/patent.rs` | EPO patent search (CQL) and CQL query builder |
-| `src/commands/uspto.rs` | USPTO ODP search, grants, applications, continuity, query builder |
+| `src/commands/uspto.rs` | USPTO ODP search, grants, applications, continuity, file wrapper (transactions/assignments/foreign-priority/adjustment/attorney/documents + OCR document text), query builder |
 | `src/commands/ops.rs` | Direct EPO OPS API (biblio, claims, family, legal, abstract) |
 | `src/commands/academic.rs` | Academic literature search |
 | `src/commands/npl.rs` | Non-patent literature search (OpenAlex) |
@@ -149,7 +149,8 @@ executes one. Provider-specific routes remain for humans and compatibility.
 | `/v1/citation-search` (+ `/forward`, `/stats/{n}`, `/novelty/{n}`) | POST/GET | Yes |
 | `/v1/patent-search-uspto/search` | POST | Yes |
 | `/v1/patent-search-uspto/grants/{patentNumber}` | GET | Yes |
-| `/v1/patent-search-uspto/applications/{appNumber}` (+ `/continuity`) | GET | Yes |
+| `/v1/patent-search-uspto/applications/{appNumber}` (+ `/continuity`, `/transactions`, `/assignment`, `/foreign-priority`, `/adjustment`, `/attorney`, `/associated-documents`) | GET | Yes |
+| `/v1/patent-search-uspto/applications/{appNumber}/documents` (+ `/{documentId}/text` — server-side OCR) | GET | Yes |
 | `/v1/ops/biblio?doc={id}` | GET | Yes |
 | `/v1/ops/abstract?doc={id}` | GET | Yes |
 | `/v1/ops/family?doc={id}` | GET | Yes |

@@ -119,7 +119,7 @@ flowleap --json tools run get_bibliography patent_number=EP1000000
 flowleap --json patent build-query "solid state battery separators" --focus precise --allow-external-processing
 ```
 
-#### flowleap-uspto — Search USPTO Open Data Portal records with Lucene queries, fetch granted patents, applications and continuity chains, and build ODP queries from natural language.
+#### flowleap-uspto — Search USPTO Open Data Portal records with Lucene queries, fetch granted patents, applications, continuity chains, and file-wrapper data (prosecution transactions, assignments, foreign priority, PTA, attorney of record), list IFW documents and read office actions as OCR-extracted text, and build ODP queries from natural language.
 
 ```bash
 flowleap --json uspto search --query 'applicationMetaData.inventionTitle:"machine learning"' --limit 5
@@ -127,6 +127,9 @@ flowleap --json uspto build-query "quantum error correction filed after 2022" --
 flowleap --json uspto grant 11800000
 flowleap --json uspto application 16123456
 flowleap --json uspto continuity 16123456
+flowleap --json uspto transactions 14412875
+flowleap --json uspto assignments 14412875
+flowleap --json uspto foreign-priority 14412875
 ```
 
 ### Workflow Triggers
