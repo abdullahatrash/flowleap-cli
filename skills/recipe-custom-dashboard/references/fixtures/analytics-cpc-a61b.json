@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "searchDescription": "keywords: machine learning; cpc: A61B",
+  "request": {
+    "keywords": [
+      "machine learning"
+    ],
+    "cpc": [
+      "A61B"
+    ],
+    "dateFrom": "2015-01-01",
+    "dateTo": "2024-12-31"
+  },
+  "analytics": {
+    "byYear": [
+      {
+        "year": 2015,
+        "count": 60
+      },
+      {
+        "year": 2016,
+        "count": 80
+      },
+      {
+        "year": 2017,
+        "count": 110
+      },
+      {
+        "year": 2018,
+        "count": 150
+      },
+      {
+        "year": 2019,
+        "count": 210
+      },
+      {
+        "year": 2020,
+        "count": 280
+      },
+      {
+        "year": 2021,
+        "count": 360
+      },
+      {
+        "year": 2022,
+        "count": 430
+      },
+      {
+        "year": 2023,
+        "count": 500
+      },
+      {
+        "year": 2024,
+        "count": 560
+      }
+    ],
+    "byCountry": [
+      {
+        "country": "US",
+        "count": 1370
+      }
+    ],
+    "topAssignees": [
+      {
+        "assignee": "IBM",
+        "count": 120
+      }
+    ],
+    "topCPC": [
+      {
+        "cpc": "A61B",
+        "count": 2740
+      }
+    ]
+  }
+}
