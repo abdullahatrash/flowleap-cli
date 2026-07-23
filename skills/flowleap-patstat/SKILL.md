@@ -29,15 +29,9 @@ application) are neither — use the search/retrieval skills (`flowleap-patent`,
 
 ## Portfolio
 
+```bash
+flowleap --json patstat portfolio "Siemens AG" --from-year 2015 --to-year 2023
 ```
-flowleap --json patstat portfolio "<applicant name>" --from-year 2015 --to-year 2023
-```
-
-(The `patstat` command family lands with cli issue #32; syntax is per that
-spec. This fence is left unlabeled — not `bash` — until the command is wired,
-so it is not picked up by this repo's documented-example validator; flip it
-to a `bash` fence once `flowleap patstat` exists in the CLI you're running
-against.)
 
 Response shape: a quotable `summary` line first — relay it verbatim before
 adding any narrative — then filings-by-year/office/grant-status aggregate
