@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="abdullahatrash/flowleap-cli"
+REPO="flowleap-ai/flowleap-cli"
 INSTALL_DIR="/usr/local/bin"
 BINARY="flowleap"
 
