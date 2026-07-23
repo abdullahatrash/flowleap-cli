@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{error::ErrorKind, Parser, Subcommand};
 use flowleap_cli::commands::{
     academic, analytics, analyze_claim, api, auth, citation, config_cmd, doctor, facade, health,
-    keys, legal, mcp, npl, ocr, ops, patent, skills, tools, upgrade, uspto,
+    keys, legal, mcp, npl, ocr, ops, patent, patstat, skills, tools, upgrade, uspto,
 };
 use flowleap_cli::{client, config, update};
 use serde_json::json;
@@ -89,6 +89,8 @@ enum Commands {
     Citation(citation::CitationArgs),
     /// Full-corpus patent analytics (filing trends, countries, assignees, CPC)
     Analytics(analytics::AnalyticsArgs),
+    /// Aggregate PATSTAT portfolio analytics for one applicant
+    Patstat(patstat::PatstatArgs),
     /// Extract text from a PDF, image, or document via OCR (file or URL)
     Ocr(ocr::OcrArgs),
     /// Analyze a patent claim: keywords, IPC codes, search queries, elements
@@ -347,6 +349,7 @@ async fn dispatch(command: Commands, ctx: &client::Context) -> Result<()> {
         Commands::Legal(args) => legal::run(ctx, args).await,
         Commands::Citation(args) => citation::run(ctx, args).await,
         Commands::Analytics(args) => analytics::run(ctx, args).await,
+        Commands::Patstat(args) => patstat::run(ctx, args).await,
         Commands::Ocr(args) => ocr::run(ctx, args).await,
         Commands::AnalyzeClaim(args) => analyze_claim::run(ctx, args).await,
         Commands::Compare(args) => facade::compare(ctx, args).await,
