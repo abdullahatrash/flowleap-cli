@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "searchDescription": "keywords: machine learning; cpc: G16H",
+  "request": {
+    "keywords": [
+      "machine learning"
+    ],
+    "cpc": [
+      "G16H"
+    ],
+    "dateFrom": "2015-01-01",
+    "dateTo": "2024-12-31"
+  },
+  "analytics": {
+    "byYear": [
+      {
+        "year": 2015,
+        "count": 0
+      },
+      {
+        "year": 2016,
+        "count": 0
+      },
+      {
+        "year": 2017,
+        "count": 10
+      },
+      {
+        "year": 2018,
+        "count": 30
+      },
+      {
+        "year": 2019,
+        "count": 70
+      },
+      {
+        "year": 2020,
+        "count": 140
+      },
+      {
+        "year": 2021,
+        "count": 230
+      },
+      {
+        "year": 2022,
+        "count": 340
+      },
+      {
+        "year": 2023,
+        "count": 470
+      },
+      {
+        "year": 2024,
+        "count": 600
+      }
+    ],
+    "byCountry": [
+      {
+        "country": "US",
+        "count": 945
+      }
+    ],
+    "topAssignees": [
+      {
+        "assignee": "IBM",
+        "count": 120
+      }
+    ],
+    "topCPC": [
+      {
+        "cpc": "G16H",
+        "count": 1890
+      }
+    ]
+  }
+}
