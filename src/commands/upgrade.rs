@@ -8,8 +8,11 @@
 //!   exactly like the first-run downloader — fetch the platform release asset,
 //!   verify its sha256 against `checksums.txt`, atomically swap over self,
 //!   re-exec `--version`.
-//! - **npm**: runs `npm i -g flowleap@latest` as its final act (the running
-//!   wrapper may be replaced mid-update, so nothing after it depends on self).
+//! - **npm**: runs `npm i -g flowleap@<latest> --prefer-online`, pinned to the
+//!   version it just resolved — the `latest` dist-tag can be stale in npm's
+//!   packument cache for minutes after a release and would silently reinstall
+//!   the previous version (#38). This is its final act (the running wrapper
+//!   may be replaced mid-update, so nothing after it depends on self).
 //! - **Homebrew**: runs `brew upgrade flowleap` when brew is present.
 //! - **cargo**: prints `cargo install --git … --force` (never silently kicks
 //!   off a full from-source recompile).
@@ -73,13 +76,28 @@ impl Channel {
 
     /// The shell command that upgrades this channel — surfaced by `--check`
     /// so a caller can act without invoking `flowleap upgrade` itself.
-    pub fn command(self) -> String {
+    /// When the resolved target version is known, the npm command pins it
+    /// instead of trusting the `latest` dist-tag: npm resolves dist-tags from
+    /// its packument cache (fresh for ~5 minutes), which right after a release
+    /// can still point at the previous version and silently reinstall it
+    /// (#38). `--prefer-online` forces a staleness check so the pinned
+    /// version resolves even against a warm cache.
+    pub fn command_for(self, latest: Option<&str>) -> String {
         match self {
-            Channel::Npm => "npm i -g flowleap@latest".to_string(),
+            Channel::Npm => match latest {
+                Some(v) => format!("npm i -g flowleap@{v} --prefer-online"),
+                None => "npm i -g flowleap@latest".to_string(),
+            },
             Channel::Homebrew => "brew upgrade flowleap".to_string(),
             Channel::Cargo => CARGO_INSTALL_CMD.to_string(),
             Channel::RawBinary => format!("curl -fsSL {INSTALL_SH_URL} | sh"),
         }
+    }
+
+    /// `command_for` without a resolved version — the generic fallback shown
+    /// when the latest version is unknown.
+    pub fn command(self) -> String {
+        self.command_for(None)
     }
 }
 
@@ -162,12 +180,13 @@ pub async fn run(ctx: &Context, args: UpgradeArgs) -> Result<()> {
 async fn report(ctx: &Context, channel: Channel, current: &str) -> Result<()> {
     let latest = fetch_latest(ctx, channel).await.ok();
     let update_available = latest.as_deref().map(|l| is_newer(l, current));
+    let command = channel.command_for(latest.as_deref());
     let value = json!({
         "channel": channel.as_str(),
         "currentVersion": current,
         "latestVersion": latest,
         "updateAvailable": update_available,
-        "command": channel.command(),
+        "command": command,
     });
     if ctx.output_format == "json" {
         output::print_json(&value);
@@ -176,7 +195,7 @@ async fn report(ctx: &Context, channel: Channel, current: &str) -> Result<()> {
             (Some(l), Some(true)) => {
                 println!("flowleap {l} is available (you have {current}).");
                 println!("Channel: {}", channel.as_str());
-                println!("Upgrade: flowleap upgrade  (or: {})", channel.command());
+                println!("Upgrade: flowleap upgrade  (or: {command})");
             }
             (Some(l), _) => {
                 println!(
@@ -186,10 +205,7 @@ async fn report(ctx: &Context, channel: Channel, current: &str) -> Result<()> {
             }
             (None, _) => {
                 println!("flowleap v{current} ({} install).", channel.as_str());
-                println!(
-                    "Could not determine the latest version. Upgrade with: {}",
-                    channel.command()
-                );
+                println!("Could not determine the latest version. Upgrade with: {command}");
             }
         }
     }
@@ -416,22 +432,28 @@ async fn download_text(ctx: &Context, url: &str) -> Result<String> {
     resp.text().await.context("reading download body")
 }
 
-/// npm channel: run `npm i -g flowleap@latest`, streaming its output. This is
-/// the final act — the running wrapper may be replaced mid-update, so nothing
-/// after the spawn depends on this process's own binary staying valid.
+/// npm channel: run `npm i -g flowleap@<latest> --prefer-online`, streaming
+/// its output. The version is pinned to what `fetch_latest` just resolved —
+/// installing the `latest` dist-tag instead would trust npm's packument
+/// cache, which can lag a release by minutes and silently reinstall the
+/// previous version right after the banner promised an upgrade (#38). This
+/// is the final act — the running wrapper may be replaced mid-update, so
+/// nothing after the spawn depends on this process's own binary staying
+/// valid.
 fn run_npm_upgrade(current: &str, latest: &str) -> Result<()> {
+    let cmd = Channel::Npm.command_for(Some(latest));
     if which("npm").is_none() {
         print_skills_reminder_with_delta(current, latest);
-        bail!("npm is not on PATH. Upgrade manually: npm i -g flowleap@latest");
+        bail!("npm is not on PATH. Upgrade manually: {cmd}");
     }
     print_skills_reminder_with_delta(current, latest);
-    println!("Running: npm i -g flowleap@latest");
+    println!("Running: {cmd}");
     let status = npm_command()
-        .args(["i", "-g", "flowleap@latest"])
+        .args(["i", "-g", &format!("flowleap@{latest}"), "--prefer-online"])
         .status()
         .context("failed to run npm")?;
     if !status.success() {
-        bail!("npm i -g flowleap@latest failed. Re-run it manually to see the error.");
+        bail!("{cmd} failed. Re-run it manually to see the error.");
     }
     Ok(())
 }
@@ -561,6 +583,22 @@ mod tests {
         assert_eq!(Channel::Homebrew.command(), "brew upgrade flowleap");
         assert_eq!(Channel::Cargo.command(), CARGO_INSTALL_CMD);
         assert!(Channel::RawBinary.command().contains("install.sh"));
+    }
+
+    #[test]
+    fn npm_command_pins_resolved_version() {
+        // #38: right after a release npm's cached packument can still map the
+        // `latest` dist-tag to the previous version. With the target version
+        // resolved, the command must pin it and force cache revalidation.
+        assert_eq!(
+            Channel::Npm.command_for(Some("0.9.9")),
+            "npm i -g flowleap@0.9.9 --prefer-online"
+        );
+        // Non-npm channels ignore the resolved version.
+        assert_eq!(
+            Channel::Homebrew.command_for(Some("0.9.9")),
+            "brew upgrade flowleap"
+        );
     }
 
     #[test]
