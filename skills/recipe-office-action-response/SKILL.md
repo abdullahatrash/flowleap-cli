@@ -61,6 +61,16 @@ Y = obviousness combination, A = background) across the prosecution.
 
 ## Step 4: Decompose the Rejected Claims
 
+The as-rejected claim text is usually AMENDED and exists only in the file
+wrapper — not in the published application. Pull the claims document (code
+CLM) dated nearest before the OA (the OA's "Responsive to communication(s)
+filed on <date>" line names the filing):
+
+```bash
+flowleap --json uspto documents <application-number> --code CLM
+flowleap uspto document-text <application-number> <documentIdentifier> > claims-as-rejected.md
+```
+
 Save each rejected independent claim to a file, then:
 
 ```bash
