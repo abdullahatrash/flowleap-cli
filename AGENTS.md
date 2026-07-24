@@ -15,6 +15,11 @@ cargo fmt --check        # Format check
 
 All four must pass before submitting changes.
 
+Gotcha: `skills/` content is embedded via `include_dir!`, which does NOT
+trigger recompilation when only SKILL.md files change — a skills-only edit
+tests against a stale embed. `touch src/commands/skills.rs` (then rebuild)
+before trusting `skills install` output or regenerating goldens.
+
 ## Architecture
 
 | File | Purpose |
