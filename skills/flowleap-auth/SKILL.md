@@ -20,7 +20,44 @@ backend, prints a user code plus verification URL (and opens the browser),
 then polls until the login is approved. The resulting session JWT is stored
 in `~/.config/flowleap/credentials.toml` (mode 0600). No local callback
 server is involved, so it also works when the browser runs on another
-machine — open the printed URL and enter the user code there.
+machine — open the printed URL and enter the user code there. When stdout is
+not a TTY, the browser auto-open and spinner are suppressed automatically.
+
+### Structured login for agents (--json)
+
+```bash
+flowleap --json auth login
+```
+
+With `--json`, `auth login` becomes a blocking process that speaks NDJSON on
+stdout — one compact JSON object per line, nothing else. It emits the
+device-authorization event immediately, then polls until the human approves
+and emits exactly one terminal event before exiting:
+
+```json
+{"event":"device_authorization","verification_uri":"https://flowleap.co/device","verification_uri_complete":"https://flowleap.co/device?code=ABCD-1234","user_code":"ABCD-1234","expires_in":900,"interval":5}
+{"event":"authorized","stored":true}
+```
+
+Terminal events: `authorized` (exit 0 — the session token is stored, same as
+the human flow) or `failed` with an `error` description (nonzero exit per the
+standard exit-code table — denied, expired, or another error). Structured
+mode has no side effects: no browser auto-open, no clipboard copy, no
+spinner — the agent decides what to do with the URL.
+
+Agent-mediated sign-in sequence:
+
+1. Run `flowleap --json auth login` in the background and read the first
+   NDJSON line (the `device_authorization` event).
+2. Relay `verification_uri` and `user_code` to the human (or open
+   `verification_uri_complete` yourself when running on the human's own
+   machine).
+3. Await the process's terminal event. `authorized` means the session token
+   is stored and authenticated commands work immediately; `failed` means
+   start over.
+4. Session tokens expire. For durability, follow up with
+   `flowleap --json auth create-token --name <name> --store` to mint and
+   store a long-lived `fl_pat_` personal token.
 
 ### Login with a personal API token
 
