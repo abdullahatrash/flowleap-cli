@@ -15,6 +15,11 @@ cargo fmt --check        # Format check
 
 All four must pass before submitting changes.
 
+Gotcha: `skills/` content is embedded via `include_dir!`, which does NOT
+trigger recompilation when only SKILL.md files change — a skills-only edit
+tests against a stale embed. `touch src/commands/skills.rs` (then rebuild)
+before trusting `skills install` output or regenerating goldens.
+
 ## Architecture
 
 | File | Purpose |
@@ -202,6 +207,28 @@ The `skills/` directory contains SKILL.md files for AI agent consumption. Each s
 - **Service skills** (`flowleap-*`): One per CLI command
 - **Persona skills** (`persona-*`): Role-based bundles for specific workflows
 - **Recipe skills** (`recipe-*`): Multi-step workflow templates
+
+### Skills vs. tools (when to write which)
+
+**Skills instruct, tools reach.** A skill can only orchestrate data that some
+existing backend tool/command already touches. Default every new capability to
+a skill; add a backend tool only when the data is unreachable — and then add
+the *thin* passthrough first and put the workflow in a skill on top of it.
+
+- **Author CLI-canonical first.** New capability-skills are written here (the
+  CLI dialect), then ported to the VS Code app's skill dialect
+  (`flowleap-agent-v2 …/assets/skills/`, extension tool names,
+  `user-invocable`) in the same sitting. The two ecosystems do not sync;
+  see `CONTEXT.md` for the vocabulary.
+- **Never route around a missing tool.** A skill must not instruct agents to
+  call provider APIs (EPO/USPTO) directly with the user's BYOK keys — that
+  forfeits caching, key handling, rate-limit protection, and uniform error
+  envelopes. Missing data is the signal to add the thin tool, not to
+  hand-roll HTTP in a skill.
+- **Distribution is release-gated.** CLI skills ship inside the binary (next
+  tag) and reach the website marketplace via the `flowleap-plugins` re-sync
+  (bump `sync.json` ref, add the entry, copy byte-for-byte). Budget the
+  re-sync into every release that touches `skills/`.
 
 ## Environment Variables
 
