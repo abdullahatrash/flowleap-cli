@@ -102,7 +102,11 @@ pub async fn run(ctx: &Context) -> Result<()> {
         "nextSteps": next_steps,
     });
 
-    output::print_value(&ctx.output_format, &report, &[]);
+    if ctx.output_format == "json" {
+        output::print_value(&ctx.output_format, &report, &[]);
+    } else {
+        render_human(&report);
+    }
 
     // Exit contract: 0 iff ready, else the generic-failure code (1). The
     // checklist above is always fully emitted first; PrintedError tells the
@@ -112,6 +116,126 @@ pub async fn run(ctx: &Context) -> Result<()> {
         Ok(())
     } else {
         Err(crate::client::PrintedError::new().into())
+    }
+}
+
+/// Human rendering of the doctor report: a ✓/✗/• checklist mirroring the JSON
+/// sections (backend, auth, provider keys, CLI, skills), then — only when
+/// something is pending — a numbered "Next steps:" list rendering the same
+/// `nextSteps` data, each step tagged with its actor. Reads exclusively from
+/// the report so the human view can never drift from `--json`; the exit
+/// contract is shared with JSON mode and unchanged here.
+fn render_human(report: &Value) {
+    use colored::Colorize;
+
+    println!("{}", "FlowLeap doctor".bold());
+    println!();
+
+    // Backend
+    let base_url = report["baseUrl"].as_str().unwrap_or_default();
+    if report["backend"]["reachable"] == Value::Bool(true) {
+        println!("  {} Backend reachable ({base_url})", "✓".green());
+    } else {
+        println!("  {} Backend unreachable ({base_url})", "✗".red());
+        if let Some(hint) = report["backend"]["hint"].as_str() {
+            println!("    {}", hint.dimmed());
+        }
+    }
+
+    // Auth — the credential kind uses the domain vocabulary: an api-key
+    // source is a personal token (durable), a token source is a session
+    // token (expires on its own; doctor pends mint-personal-token).
+    if report["auth"]["available"] == Value::Bool(true) {
+        let kind = match report["auth"]["source"].as_str() {
+            Some("env-api-key") | Some("config-api-key") => "personal token",
+            _ => "session token",
+        };
+        println!("  {} Authenticated ({kind})", "✓".green());
+    } else {
+        println!("  {} Not signed in", "✗".red());
+    }
+
+    // Provider keys, one line each.
+    provider_line(report, "epo", "EPO keys", "store-epo-keys");
+    provider_line(report, "uspto", "USPTO key", "store-uspto-key");
+
+    // CLI version — an available upgrade is informational (•), never blocking.
+    let version = report["cli"]["currentVersion"].as_str().unwrap_or_default();
+    match &report["cli"]["updateAvailable"] {
+        Value::Bool(true) => println!(
+            "  {} CLI {version} — {} available: {}",
+            "•".yellow(),
+            report["cli"]["latestVersion"]
+                .as_str()
+                .unwrap_or("a newer version"),
+            "flowleap upgrade".cyan(),
+        ),
+        Value::Bool(false) => println!("  {} CLI {version} (latest)", "✓".green()),
+        _ => println!("  {} CLI {version}", "✓".green()),
+    }
+
+    // Skills — stale installs are informational (•), never blocking.
+    let stale = report["skills"]["stale"].as_array().map_or(0, Vec::len);
+    if stale == 0 {
+        println!("  {} Skills up to date", "✓".green());
+    } else {
+        println!(
+            "  {} {stale} stale skill install(s) — refresh: {}",
+            "•".yellow(),
+            "flowleap skills update".cyan(),
+        );
+    }
+
+    // Next steps — same pending-only, actor-tagged data as the JSON contract.
+    // A ready machine has none and the section is omitted entirely.
+    let steps = report["nextSteps"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    if !steps.is_empty() {
+        println!();
+        println!("{}", "Next steps:".bold());
+        for (index, step) in steps.iter().enumerate() {
+            let tag = format!("[{}]", step["actor"].as_str().unwrap_or("agent"));
+            let title = step["title"].as_str().unwrap_or_default();
+            match step["run"].as_str() {
+                Some(run) => println!("  {}. {} {title}: {}", index + 1, tag.bold(), run.cyan()),
+                None => println!("  {}. {} {title}", index + 1, tag.bold()),
+            }
+            if let Some(url) = step["url"].as_str() {
+                println!("     {}", url.cyan());
+            }
+        }
+    }
+}
+
+/// One provider checklist line, derived from the report alone. Blocking is
+/// "this provider has a pending store step in nextSteps": ✗ when blocking,
+/// ✓ when keys are set locally, and • when neither — the only way to be
+/// non-blocking without local keys is server coverage (informational, not a
+/// gap to chase).
+fn provider_line(report: &Value, provider: &str, label: &str, store_step_id: &str) {
+    use colored::Colorize;
+
+    let local = report["providerKeys"][provider] == Value::Bool(true);
+    let pending = report["nextSteps"]
+        .as_array()
+        .is_some_and(|steps| steps.iter().any(|s| s["id"] == store_step_id));
+    let server_checked = report["keyValidation"]["source"] == "server";
+
+    match (pending, local) {
+        (false, true) => println!("  {} {label}: set locally", "✓".green()),
+        (false, false) => println!(
+            "  {} {label}: none locally — covered by server",
+            "•".yellow()
+        ),
+        (true, true) => println!("  {} {label}: set locally, rejected by server", "✗".red()),
+        // With a server verdict we know coverage is absent; on the
+        // local-presence fallback we only know the keys are not set.
+        (true, false) if server_checked => {
+            println!("  {} {label}: not set, not covered", "✗".red())
+        }
+        (true, false) => println!("  {} {label}: not set", "✗".red()),
     }
 }
 

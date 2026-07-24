@@ -2,6 +2,11 @@
 //! `ready` and actor-tagged pending-only `nextSteps`, exits 0 iff ready, and
 //! keeps every pre-existing field — driven through the real binary against a
 //! wiremock backend. The contract is recorded in docs/adr/0001.
+//!
+//! Human rendering (issue #44): bare `flowleap doctor` renders a ✓/✗/•
+//! checklist plus a numbered actor-tagged next-steps list instead of raw
+//! JSON, under the same exit contract. Human-mode assertions are
+//! contains-style on stable lines, never full-output goldens.
 
 mod support;
 
@@ -363,4 +368,138 @@ async fn unreachable_backend_with_credentials_is_not_ready() {
     let report = stdout_json(&output);
     assert_eq!(report["nextSteps"], json!([]));
     assert_eq!(report["ready"], false, "unreachable is never ready");
+}
+
+// ---------------------------------------------------------------------------
+// Human rendering (issue #44) — bare `flowleap doctor`, no --json.
+// ---------------------------------------------------------------------------
+
+/// A run's stdout as UTF-8, after asserting it is not raw JSON — human mode
+/// must never dump the report object.
+fn stdout_human(output: &std::process::Output) -> String {
+    let stdout = String::from_utf8(output.stdout.clone()).expect("stdout is utf8");
+    assert!(
+        !stdout.trim_start().starts_with('{'),
+        "human mode must not emit raw JSON: {stdout}"
+    );
+    stdout
+}
+
+/// Fully ready machine (valid local user keys): every checklist line is ✓,
+/// there is no "Next steps:" section at all, and the run exits 0.
+#[tokio::test]
+async fn human_ready_machine_renders_all_check_marks_and_no_next_steps() {
+    let server = MockServer::start().await;
+    mount_health_ok(&server).await;
+    mount_validate(
+        &server,
+        json!({
+            "epo": { "source": "user", "valid": true },
+            "uspto": { "source": "user", "valid": true },
+        }),
+    )
+    .await;
+
+    let output = run_cli(
+        &server.uri(),
+        &[
+            ("FLOWLEAP_API_KEY", "fl_pat_test"),
+            ("FLOWLEAP_EPO_KEY", "k"),
+            ("FLOWLEAP_EPO_SECRET", "s"),
+            ("FLOWLEAP_USPTO_KEY", "u"),
+        ],
+        &["doctor"],
+    )
+    .await;
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = stdout_human(&output);
+    assert!(stdout.contains("FlowLeap doctor"), "header: {stdout}");
+    assert!(stdout.contains("✓ Backend reachable"), "backend: {stdout}");
+    assert!(
+        stdout.contains("✓ Authenticated (personal token)"),
+        "auth: {stdout}"
+    );
+    assert!(stdout.contains("✓ EPO keys: set locally"), "epo: {stdout}");
+    assert!(
+        stdout.contains("✓ USPTO key: set locally"),
+        "uspto: {stdout}"
+    );
+    assert!(stdout.contains("✓ CLI"), "cli: {stdout}");
+    assert!(stdout.contains("✓ Skills up to date"), "skills: {stdout}");
+    assert!(!stdout.contains("✗"), "ready shows no ✗: {stdout}");
+    assert!(!stdout.contains("•"), "ready shows no •: {stdout}");
+    assert!(
+        !stdout.contains("Next steps:"),
+        "ready machine has no next-steps section: {stdout}"
+    );
+}
+
+/// Unauthenticated: the auth line is ✗ and the numbered next-steps list opens
+/// with the [human]-tagged sign-in step carrying its runnable command; the
+/// run exits 1.
+#[tokio::test]
+async fn human_unauthenticated_renders_cross_and_actor_tagged_steps() {
+    let server = MockServer::start().await;
+    mount_health_ok(&server).await;
+
+    let output = run_cli(&server.uri(), &[], &["doctor"]).await;
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = stdout_human(&output);
+    assert!(stdout.contains("✗ Not signed in"), "auth line: {stdout}");
+    assert!(stdout.contains("Next steps:"), "section: {stdout}");
+    assert!(stdout.contains("1. [human]"), "numbered tag: {stdout}");
+    assert!(
+        stdout.contains("flowleap --json auth login"),
+        "login command: {stdout}"
+    );
+    assert!(stdout.contains("[agent]"), "agent-tagged steps: {stdout}");
+    assert!(
+        stdout.contains("https://data.uspto.gov/apis/getting-started"),
+        "human step URL on its own line: {stdout}"
+    );
+}
+
+/// A provider the server covers renders as an informational • line and gets
+/// no next step, while the genuinely blocking provider renders ✗ ("not
+/// covered" — the server verdict proved it) with its steps listed.
+#[tokio::test]
+async fn human_server_covered_provider_renders_dot_and_no_step() {
+    let server = MockServer::start().await;
+    mount_health_ok(&server).await;
+    mount_validate(
+        &server,
+        json!({
+            "epo": { "source": "server", "valid": true },
+            "uspto": { "source": "none", "valid": null },
+        }),
+    )
+    .await;
+
+    let output = run_cli(
+        &server.uri(),
+        &[("FLOWLEAP_API_KEY", "fl_pat_test")],
+        &["doctor"],
+    )
+    .await;
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = stdout_human(&output);
+    assert!(
+        stdout.contains("• EPO keys: none locally — covered by server"),
+        "covered provider is informational: {stdout}"
+    );
+    assert!(
+        stdout.contains("✗ USPTO key: not set, not covered"),
+        "blocking provider: {stdout}"
+    );
+    assert!(
+        !stdout.contains("EPO consumer key"),
+        "no step for the covered provider: {stdout}"
+    );
+    assert!(
+        stdout.contains("Store the USPTO ODP API key"),
+        "blocking provider keeps its steps: {stdout}"
+    );
 }
