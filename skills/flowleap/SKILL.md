@@ -16,6 +16,22 @@ command -v flowleap || true
 flowleap --json doctor
 ```
 
+Doctor exits **0 iff the machine is ready to work** (backend reachable,
+authenticated, nothing blocking); otherwise it exits 1 and its JSON lists the
+pending blocking steps in `nextSteps`, each tagged with an `actor`. Drive
+onboarding agent-mediated from that list:
+
+1. Execute every `actor: "agent"` step yourself via its `run` command (e.g.
+   `mint-personal-token`, `store-epo-keys`, `verify-keys`).
+2. Relay every `actor: "human"` step to the user — its `title` plus `url`
+   (provider signups) or the verification link from `flowleap --json auth
+   login` (see `flowleap-auth`).
+3. Re-run `flowleap --json doctor` until `ready` is `true` (empty
+   `nextSteps`).
+
+Server-covered provider keys never appear in `nextSteps` — the list is only
+what actually blocks work. Full contract: `flowleap-shared`.
+
 **CLI not installed?** Install it first — npm when Node is present, the
 install script otherwise:
 

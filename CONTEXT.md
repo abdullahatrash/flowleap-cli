@@ -26,6 +26,39 @@ containing CLI skills copied byte-for-byte from a pinned flowleap-cli tag
 catalog from Skill Packs at build time. Skill Packs ship CLI skills only —
 app skills never flow through them.
 
+**Agent-mediated onboarding**:
+Onboarding driven by an agent on a human's behalf: the agent executes every
+step it can and relays the rest to the human. Contrast with the interactive
+wizard, where the human drives.
+
+**Actor**:
+Who performs a next step — `human` (browser sign-in, obtaining provider
+keys) or `agent` (anything runnable headlessly). Every next step has exactly
+one actor; a task needing both is two steps.
+
+**Next step**:
+A pending onboarding action that blocks work. Steps whose need is already
+covered (e.g. a provider the server has its own keys for) are not next
+steps — the list means "what blocks you," not "what could be configured."
+
+**Ready**:
+Nothing blocks work: backend reachable, authenticated, no next steps.
+Distinct from "reachable" — a reachable backend with no credentials is not
+ready.
+
+**Session token**:
+The short-lived credential produced by the browser device-flow sign-in. It
+expires on its own; a machine holding only a session token is signed in but
+not durably set up.
+_Avoid_: calling it just "the token" — that hides the expiry distinction.
+
+**Personal token**:
+The long-lived `fl_pat_…` credential a user mints for one machine or agent.
+The durable way a machine stays authenticated; named at creation so it can be
+listed and revoked individually.
+_Avoid_: "API key" — the config field is historically named that, but the
+domain concept is a personal token.
+
 **Capability vs. skill**:
 Skills instruct, tools reach. A *capability* (data access — a backend
 endpoint/tool) is what agents call; a *skill* is instructions composing
