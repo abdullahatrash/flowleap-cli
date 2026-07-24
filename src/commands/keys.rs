@@ -450,6 +450,39 @@ fn skip_warning(provider: &str, server_has_keys: bool, commands: &str) {
     }
 }
 
+/// One line of the fixed four-step frame: `[n/4] <label>`, label padded so
+/// same-line verdicts (✓/✗) align into a column. Numbering is stable run to
+/// run — steps already satisfied render as instant ✓ lines, never renumbered.
+fn step(n: usize, label: &str) -> colored::ColoredString {
+    format!("[{n}/4] {label:<11}").bold()
+}
+
+/// Per-step outcome, remembered for the closing recap card.
+enum StepVerdict {
+    /// Rendered as a green ✓ line.
+    Done(String),
+    /// Rendered as a yellow • line carrying the skip reason.
+    Skipped(String),
+}
+
+/// Recap verdict for a skipped provider step, mirroring the server-aware
+/// `skip_warning` semantics (covered by server > existing keys kept > blocking).
+fn skip_verdict(
+    provider_label: &str,
+    covered_by_server: bool,
+    kept_existing: bool,
+    commands: &str,
+) -> StepVerdict {
+    let reason = if covered_by_server {
+        "covered by server".to_string()
+    } else if kept_existing {
+        "kept existing keys".to_string()
+    } else {
+        format!("{commands} will fail until keys are added")
+    };
+    StepVerdict::Skipped(format!("{provider_label} skipped — {reason}"))
+}
+
 pub async fn setup_wizard(ctx: &Context) -> Result<()> {
     require_tty()?;
     let theme = ColorfulTheme::default();
@@ -457,32 +490,37 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
     println!("{}", "FlowLeap CLI Setup".bold());
     println!("{}", "──────────────────".dimmed());
 
-    // 1. Backend reachability
+    // [1/4] Backend reachability
     let health = ctx
         .execute_json_envelope(ctx.request(reqwest::Method::GET, "/health", None))
         .await;
     match health {
         Ok(value) if value["ok"].as_bool() == Some(true) => {
             println!(
-                "{} Backend reachable ({})",
+                "{} {} reachable ({})",
+                step(1, "Backend"),
                 "✓".green(),
                 ctx.config.base_url
             );
         }
         _ => {
             println!(
-                "{} Backend not reachable at {} — check --base-url or start it, then re-run.",
+                "{} {} not reachable at {} — check --base-url or start it, then re-run.",
+                step(1, "Backend"),
                 "✗".red(),
                 ctx.config.base_url
             );
             bail!("Backend unreachable.");
         }
     }
+    let backend_verdict = StepVerdict::Done("Backend reachable".to_string());
 
-    // 2. Auth — run it inline rather than bailing out of the wizard.
+    // [2/4] Sign in — run it inline rather than bailing out of the wizard.
     // Work on a local Context so post-auth steps carry the new credential.
     let mut ctx = with_candidate_keys(ctx, ctx.credentials.clone());
+    let auth_verdict;
     if ctx.credentials.auth_header().is_none() {
+        println!("{}", step(2, "Sign in"));
         let choice = dialoguer::Select::with_theme(&theme)
             .with_prompt("Not signed in yet — how do you want to authenticate?")
             .items(&[
@@ -514,6 +552,9 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
                         "✓".green(),
                         prefix
                     );
+                    auth_verdict = StepVerdict::Done("Authenticated (personal token)".to_string());
+                } else {
+                    auth_verdict = StepVerdict::Done("Authenticated (session token)".to_string());
                 }
             }
             1 => {
@@ -539,6 +580,7 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
                 creds.token = None;
                 creds.save()?;
                 println!("{} Token verified and stored", "✓".green());
+                auth_verdict = StepVerdict::Done("Authenticated (personal token)".to_string());
             }
             _ => {
                 println!(
@@ -551,7 +593,16 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
             }
         }
     } else {
-        println!("{} Authenticated", "✓".green());
+        println!(
+            "{} {} already authenticated",
+            step(2, "Sign in"),
+            "✓".green()
+        );
+        auth_verdict = StepVerdict::Done(if ctx.credentials.token.is_some() {
+            "Authenticated (session token)".to_string()
+        } else {
+            "Authenticated (personal token)".to_string()
+        });
     }
     let ctx = &ctx;
 
@@ -570,11 +621,14 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
 
     let mut creds = Credentials::load()?;
 
-    // 3. EPO
+    // [3/4] EPO keys
+    let epo_verdict;
+    let epo_existing = creds.epo_pair().is_some();
     let epo_prompt = match creds.epo_pair() {
         Some((key, _)) => format!("EPO OPS keys (currently {}) — replace?", mask(key)),
         None => "Add EPO OPS keys? (worldwide patent data)".to_string(),
     };
+    println!("{}", step(3, "EPO keys"));
     println!("  Get free EPO keys: {} → My apps", EPO_SIGNUP.underline());
     if Confirm::with_theme(&theme)
         .with_prompt(epo_prompt)
@@ -601,9 +655,13 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
                         continue;
                     }
                     skip_warning("epo", epo_on_server, "patent/ops commands");
+                    epo_verdict =
+                        skip_verdict("EPO", epo_on_server, epo_existing, "patent/ops commands");
                     break;
                 }
-                Value::Bool(true) => {}
+                Value::Bool(true) => {
+                    epo_verdict = StepVerdict::Done("EPO keys verified".to_string());
+                }
                 _ => {
                     if !Confirm::with_theme(&theme)
                         .with_prompt("EPO OPS is unreachable, so the keys could NOT be verified — save anyway?")
@@ -611,8 +669,12 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
                         .interact()?
                     {
                         skip_warning("epo", epo_on_server, "patent/ops commands");
+                        epo_verdict =
+                            skip_verdict("EPO", epo_on_server, epo_existing, "patent/ops commands");
                         break;
                     }
+                    epo_verdict =
+                        StepVerdict::Done("EPO keys saved (could not verify)".to_string());
                 }
             }
             creds.epo_key = Some(key);
@@ -625,9 +687,13 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
             epo_on_server || creds.epo_pair().is_some(),
             "patent/ops commands",
         );
+        epo_verdict = skip_verdict("EPO", epo_on_server, epo_existing, "patent/ops commands");
     }
 
-    // 4. USPTO
+    // [4/4] USPTO key
+    let uspto_verdict;
+    let uspto_existing = creds.uspto_key.is_some();
+    println!("{}", step(4, "USPTO key"));
     println!("  Get a free USPTO ODP key: {}", USPTO_SIGNUP.underline());
     let uspto_prompt = match &creds.uspto_key {
         Some(key) => format!("USPTO ODP key (currently {}) — replace?", mask(key)),
@@ -659,9 +725,17 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
                         continue;
                     }
                     skip_warning("uspto", uspto_on_server, "uspto/citation commands");
+                    uspto_verdict = skip_verdict(
+                        "USPTO",
+                        uspto_on_server,
+                        uspto_existing,
+                        "uspto/citation commands",
+                    );
                     break;
                 }
-                Value::Bool(true) => {}
+                Value::Bool(true) => {
+                    uspto_verdict = StepVerdict::Done("USPTO key verified".to_string());
+                }
                 _ => {
                     if !Confirm::with_theme(&theme)
                         .with_prompt("USPTO ODP is unreachable, so the key could NOT be verified — save anyway?")
@@ -669,8 +743,16 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
                         .interact()?
                     {
                         skip_warning("uspto", uspto_on_server, "uspto/citation commands");
+                        uspto_verdict = skip_verdict(
+                            "USPTO",
+                            uspto_on_server,
+                            uspto_existing,
+                            "uspto/citation commands",
+                        );
                         break;
                     }
+                    uspto_verdict =
+                        StepVerdict::Done("USPTO key saved (could not verify)".to_string());
                 }
             }
             creds.uspto_key = Some(key);
@@ -682,16 +764,33 @@ pub async fn setup_wizard(ctx: &Context) -> Result<()> {
             uspto_on_server || creds.uspto_key.is_some(),
             "uspto/citation commands",
         );
+        uspto_verdict = skip_verdict(
+            "USPTO",
+            uspto_on_server,
+            uspto_existing,
+            "uspto/citation commands",
+        );
     }
 
-    // 5. Save + summary
+    // Save + recap card: all four verdicts, then the existing outro.
     creds.save()?;
     println!();
     println!(
-        "{} Saved to {:?} (0600)",
-        "✓".green(),
-        Credentials::credentials_path()?
+        "{} — saved to {}",
+        "Setup complete".bold(),
+        Credentials::credentials_path()?.display()
     );
+    for verdict in [
+        &backend_verdict,
+        &auth_verdict,
+        &epo_verdict,
+        &uspto_verdict,
+    ] {
+        match verdict {
+            StepVerdict::Done(text) => println!("  {} {}", "✓".green(), text),
+            StepVerdict::Skipped(text) => println!("  {} {}", "•".yellow(), text),
+        }
+    }
     println!();
     println!("You're ready. Try:");
     println!(
