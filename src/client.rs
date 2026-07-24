@@ -174,6 +174,7 @@ pub fn error_exit_code(err: &anyhow::Error) -> i32 {
 #[derive(Debug, Default)]
 pub struct PrintedError {
     status: Option<u16>,
+    code: Option<i32>,
 }
 
 impl PrintedError {
@@ -184,10 +185,24 @@ impl PrintedError {
     pub fn with_status(status: u16) -> Self {
         Self {
             status: Some(status),
+            code: None,
+        }
+    }
+
+    /// An already-rendered error carrying a precomputed exit code — for paths
+    /// (like structured device-flow login) that map their error via
+    /// [`error_exit_code`] before rendering, so no code is invented.
+    pub fn with_exit_code(code: i32) -> Self {
+        Self {
+            status: None,
+            code: Some(code),
         }
     }
 
     pub fn exit_code(&self) -> i32 {
+        if let Some(code) = self.code {
+            return code;
+        }
         self.status.map(exit_code_for_status).unwrap_or(1)
     }
 }

@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
+use std::io::{IsTerminal, Write};
 use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
@@ -167,6 +168,12 @@ async fn login(ctx: &Context, api_key: Option<String>, token: Option<String>) ->
         return Ok(());
     }
 
+    // Structured mode (--json / --output json): blocking NDJSON event stream
+    // for agents — no browser, clipboard, or spinner side effects.
+    if ctx.output_format == "json" {
+        return structured_device_login(ctx).await;
+    }
+
     // OAuth 2.0 Device Authorization flow
     let access_token = device_flow_login(ctx).await?;
     let mut creds = Credentials::load()?;
@@ -208,20 +215,15 @@ fn copy_to_clipboard(text: &str) -> bool {
     false
 }
 
-/// Run the OAuth 2.0 Device Authorization flow and return the access token.
-/// Prints the code/URL (copying the URL to the clipboard when possible), opens
-/// the browser, polls with slow_down handling, and shows a manual-fallback
-/// hint if approval takes a while. Does NOT persist anything.
-pub async fn device_flow_login(ctx: &Context) -> Result<String> {
-    println!("Starting device authorization flow...");
-
+/// Request device authorization from `POST /oauth/device`.
+///
+/// Reuses the shared, configured client (timeouts + versioned User-Agent)
+/// rather than constructing an unconfigured one. The device endpoints are
+/// unauthenticated, so no auth injection is needed here.
+async fn request_device_authorization(ctx: &Context) -> Result<DeviceAuthResponse> {
     let base_url = ctx.config.base_url.trim_end_matches('/');
-
-    // Reuse the shared, configured client (timeouts + versioned User-Agent)
-    // rather than constructing an unconfigured one. The device endpoints are
-    // unauthenticated, so no auth injection is needed here.
-    let client = &ctx.http;
-    let resp = client
+    let resp = ctx
+        .http
         .post(format!("{}/oauth/device", base_url))
         .json(&serde_json::json!({"client_id": "flowleap-cli"}))
         .send()
@@ -233,7 +235,113 @@ pub async fn device_flow_login(ctx: &Context) -> Result<String> {
         bail!("Device authorization request failed ({}): {}", status, body);
     }
 
-    let response: DeviceAuthResponse = resp.json().await?;
+    Ok(resp.json().await?)
+}
+
+/// Poll `POST /oauth/device/token` until the flow reaches a terminal state,
+/// honoring the server's `interval`, `slow_down`, and `expires_in`. Returns
+/// the access token on approval. `spinner` and `show_manual_hint` are the
+/// human-flow UI; structured mode passes neither and prints nothing.
+async fn poll_device_token(
+    ctx: &Context,
+    response: &DeviceAuthResponse,
+    spinner: Option<&ProgressBar>,
+    show_manual_hint: bool,
+) -> Result<String> {
+    let base_url = ctx.config.base_url.trim_end_matches('/');
+    let clear_spinner = || {
+        if let Some(spinner) = spinner {
+            spinner.finish_and_clear();
+        }
+    };
+
+    let mut interval = response.interval;
+    let started = std::time::Instant::now();
+    let deadline = started + Duration::from_secs(response.expires_in);
+    let mut hinted = false;
+
+    loop {
+        tokio::time::sleep(Duration::from_secs(interval)).await;
+
+        if std::time::Instant::now() > deadline {
+            clear_spinner();
+            bail!("Device authorization expired. Please try again.");
+        }
+
+        // Browser didn't open, or the tab got lost? Give the manual path once.
+        if show_manual_hint && !hinted && started.elapsed() > Duration::from_secs(25) {
+            hinted = true;
+            let print_hint = || {
+                println!(
+                    "  Taking a while? Open {} manually and enter code {}",
+                    response.verification_uri_complete.cyan(),
+                    response.user_code.bold().yellow()
+                );
+            };
+            match spinner {
+                Some(spinner) => spinner.suspend(print_hint),
+                None => print_hint(),
+            }
+        }
+
+        let poll_resp = ctx
+            .http
+            .post(format!("{}/oauth/device/token", base_url))
+            .json(&serde_json::json!({
+                "device_code": response.device_code,
+                "client_id": "flowleap-cli",
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+            }))
+            .send()
+            .await?;
+
+        let body: serde_json::Value = poll_resp.json().await?;
+
+        if let Some(access_token) = body.get("access_token").and_then(|v| v.as_str()) {
+            clear_spinner();
+            return Ok(access_token.to_string());
+        }
+
+        if let Some(error) = body.get("error").and_then(|v| v.as_str()) {
+            match error {
+                "authorization_pending" => continue,
+                "slow_down" => {
+                    interval += 5;
+                    continue;
+                }
+                "expired_token" => {
+                    clear_spinner();
+                    bail!("Device authorization expired. Please try again.");
+                }
+                "access_denied" => {
+                    clear_spinner();
+                    bail!("Authorization was denied.");
+                }
+                other => {
+                    clear_spinner();
+                    let desc = body
+                        .get("error_description")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown error");
+                    bail!("Authorization failed: {} — {}", other, desc);
+                }
+            }
+        }
+    }
+}
+
+/// Run the OAuth 2.0 Device Authorization flow and return the access token.
+/// Prints the code/URL (copying the URL to the clipboard when possible),
+/// polls with slow_down handling, and shows a manual-fallback hint if
+/// approval takes a while. Browser auto-open and the spinner run only when
+/// stdout is a TTY — a headless run must never pop UI. Does NOT persist
+/// anything.
+pub async fn device_flow_login(ctx: &Context) -> Result<String> {
+    let interactive = std::io::stdout().is_terminal();
+
+    println!("Starting device authorization flow...");
+
+    let response = request_device_authorization(ctx).await?;
 
     let copied = copy_to_clipboard(&response.verification_uri_complete);
     println!(
@@ -249,83 +357,75 @@ pub async fn device_flow_login(ctx: &Context) -> Result<String> {
         },
     );
 
-    let _ = open::that(&response.verification_uri_complete);
+    let spinner = if interactive {
+        let _ = open::that(&response.verification_uri_complete);
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        spinner.set_message("Waiting for authorization...");
+        spinner.enable_steady_tick(Duration::from_millis(100));
+        Some(spinner)
+    } else {
+        None
+    };
 
-    let spinner = ProgressBar::new_spinner();
-    spinner.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.cyan} {msg}")
-            .unwrap(),
-    );
-    spinner.set_message("Waiting for authorization...");
-    spinner.enable_steady_tick(Duration::from_millis(100));
+    poll_device_token(ctx, &response, spinner.as_ref(), true).await
+}
 
-    let mut interval = response.interval;
-    let started = std::time::Instant::now();
-    let deadline = started + Duration::from_secs(response.expires_in);
-    let mut hinted = false;
+/// Write one NDJSON event: a compact JSON object plus newline, flushed
+/// immediately so agents reading the pipe see it before polling completes.
+fn emit_ndjson_event(value: &serde_json::Value) {
+    let mut stdout = std::io::stdout().lock();
+    let _ = serde_json::to_writer(&mut stdout, value);
+    let _ = stdout.write_all(b"\n");
+    let _ = stdout.flush();
+}
 
-    loop {
-        tokio::time::sleep(Duration::from_secs(interval)).await;
+/// Structured (--json) device-flow login for agents: a blocking NDJSON event
+/// stream on stdout. Emits the `device_authorization` event immediately (so
+/// the agent can relay the URL and user code to the human), polls until the
+/// flow completes, and emits exactly one terminal event — `authorized`
+/// (session token stored, exit 0) or `failed` (nonzero exit per the
+/// documented exit-code table). No side effects: no browser auto-open, no
+/// clipboard copy, no spinner — stdout carries nothing but NDJSON.
+async fn structured_device_login(ctx: &Context) -> Result<()> {
+    let outcome = async {
+        let response = request_device_authorization(ctx).await?;
+        emit_ndjson_event(&serde_json::json!({
+            "event": "device_authorization",
+            "verification_uri": response.verification_uri,
+            "verification_uri_complete": response.verification_uri_complete,
+            "user_code": response.user_code,
+            "expires_in": response.expires_in,
+            "interval": response.interval,
+        }));
+        let access_token = poll_device_token(ctx, &response, None, false).await?;
+        // Store the session token exactly as the human flow does.
+        let mut creds = Credentials::load()?;
+        creds.token = Some(access_token);
+        creds.save()?;
+        anyhow::Ok(())
+    }
+    .await;
 
-        if std::time::Instant::now() > deadline {
-            spinner.finish_and_clear();
-            bail!("Device authorization expired. Please try again.");
+    match outcome {
+        Ok(()) => {
+            emit_ndjson_event(&serde_json::json!({"event": "authorized", "stored": true}));
+            Ok(())
         }
-
-        // Browser didn't open, or the tab got lost? Give the manual path once.
-        if !hinted && started.elapsed() > Duration::from_secs(25) {
-            hinted = true;
-            spinner.suspend(|| {
-                println!(
-                    "  Taking a while? Open {} manually and enter code {}",
-                    response.verification_uri_complete.cyan(),
-                    response.user_code.bold().yellow()
-                );
-            });
-        }
-
-        let poll_resp = client
-            .post(format!("{}/oauth/device/token", base_url))
-            .json(&serde_json::json!({
-                "device_code": response.device_code,
-                "client_id": "flowleap-cli",
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
-            }))
-            .send()
-            .await?;
-
-        let body: serde_json::Value = poll_resp.json().await?;
-
-        if let Some(access_token) = body.get("access_token").and_then(|v| v.as_str()) {
-            spinner.finish_and_clear();
-            return Ok(access_token.to_string());
-        }
-
-        if let Some(error) = body.get("error").and_then(|v| v.as_str()) {
-            match error {
-                "authorization_pending" => continue,
-                "slow_down" => {
-                    interval += 5;
-                    continue;
-                }
-                "expired_token" => {
-                    spinner.finish_and_clear();
-                    bail!("Device authorization expired. Please try again.");
-                }
-                "access_denied" => {
-                    spinner.finish_and_clear();
-                    bail!("Authorization was denied.");
-                }
-                other => {
-                    spinner.finish_and_clear();
-                    let desc = body
-                        .get("error_description")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Unknown error");
-                    bail!("Authorization failed: {} — {}", other, desc);
-                }
-            }
+        Err(err) => {
+            let code = crate::client::error_exit_code(&err);
+            emit_ndjson_event(&serde_json::json!({
+                "event": "failed",
+                "error": err.to_string(),
+            }));
+            // The failure is already on stdout as the terminal event; a
+            // PrintedError keeps the top-level handler from printing a second
+            // JSON envelope while preserving the documented exit code.
+            Err(crate::client::PrintedError::with_exit_code(code).into())
         }
     }
 }
