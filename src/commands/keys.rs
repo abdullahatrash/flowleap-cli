@@ -127,7 +127,10 @@ fn probe_credentials(
 /// POST /v1/keys/validate with the given credentials. Returns the per-provider
 /// verdicts object, mapping the middleware's eager EPO rejection (400
 /// patent_provider_key_invalid) into an epo-invalid verdict.
-async fn validate(ctx: &Context, creds: Credentials) -> Result<Value> {
+///
+/// Shared with `doctor`, which uses the same verdicts (source user|server|none,
+/// valid true|false|null) to decide which provider next-steps actually block.
+pub(crate) async fn validate(ctx: &Context, creds: Credentials) -> Result<Value> {
     let probe = with_candidate_keys(ctx, creds);
     let envelope = probe
         .execute_json_envelope(probe.post("/v1/keys/validate", &json!({})))

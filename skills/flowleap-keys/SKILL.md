@@ -15,11 +15,22 @@ per-request; the CLI never prints them (verbose/dry-run redact).
 ```bash
 flowleap --json keys list    # what's configured locally (masked)
 flowleap --json keys test    # live verdicts: source user|server|none, valid true|false|null
-flowleap --json doctor       # includes a providerKeys section
+flowleap --json doctor       # providerKeys section + pending steps in nextSteps
 ```
 
 `keys test` needing nothing locally is fine when `source` is `server` — the
 backend has its own keys and commands work without BYOK.
+
+Doctor's `nextSteps` lists provider keys only when they actually **block**
+work: server-covered providers produce no steps. A blocking provider appears
+as an obtain/store pair — `obtain-epo-keys` / `obtain-uspto-key` (`actor:
+"human"`, carries the signup `url` — relay it to the user) then
+`store-epo-keys` / `store-uspto-key` (`actor: "agent"`, carries the `run`
+command — execute it once the user hands you the keys) — followed by
+`verify-keys` (`actor: "agent"`, runs `keys test`). When doctor cannot reach
+the validation endpoint (unauthenticated/offline) it falls back to local key
+presence and says so in `keyValidation.note`. See `flowleap-shared` for the
+full `nextSteps`/`ready`/exit contract.
 
 ## The agent protocol — when keys are missing or rejected
 

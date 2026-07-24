@@ -79,6 +79,39 @@ additive hints — `subscriptionHint` (402, has `upgradeUrl`, needs a human),
 | 6 | Rate limited (HTTP 429) — back off per `rateLimitHint.retryAfterSeconds` |
 | 7 | Network failure reaching the backend |
 
+## Readiness — `flowleap --json doctor`
+
+Doctor is the machine-readable onboarding contract. Its JSON always carries:
+
+- `ready: bool` — backend reachable AND authenticated AND no blocking next
+  steps. Stricter than `ok`, which keeps its reachability-only meaning.
+- `nextSteps` — the pending, **blocking** onboarding steps in dependency
+  order (empty array when complete). Steps already covered — e.g. a provider
+  the server has its own keys for — are omitted. Each step:
+
+```json
+{ "id": "store-epo-keys", "actor": "agent",
+  "title": "Store the EPO consumer key and secret",
+  "run": "flowleap keys set epo --key <k> --secret <s>" }
+```
+
+Stable step ids (public contract): `auth-login` (human), `mint-personal-token`
+(agent — pending while auth is only a session token with no `fl_pat_` personal
+token), `obtain-epo-keys` (human), `store-epo-keys` (agent),
+`obtain-uspto-key` (human), `store-uspto-key` (agent), `verify-keys` (agent).
+
+**Exit contract: doctor exits 0 iff `ready`, else 1** — with the checklist
+JSON always fully emitted first, so `flowleap doctor && <work>` gates
+pipelines without parsing. An unreachable backend still emits the checklist
+from local state (offline diagnosis works); `keyValidation.source` says
+whether provider verdicts came from the server (`"server"`) or fell back to
+local key presence (`"local"`, with a `note`).
+
+**Agent-mediated sequence**: run `flowleap --json doctor`; for each step in
+`nextSteps`, execute `actor: "agent"` steps yourself via their `run` command,
+and relay `actor: "human"` steps (title + `url`) to the user; re-run doctor
+until `ready` is true.
+
 ## Updating the CLI
 
 `flowleap upgrade` (alias `flowleap update`) updates the CLI itself, detecting
